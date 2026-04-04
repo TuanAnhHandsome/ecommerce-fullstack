@@ -1,0 +1,17 @@
+package com.ecommerce.service;
+
+import com.ecommerce.dto.request.ProductRequest;
+import com.ecommerce.dto.response.PageResponse;
+import com.ecommerce.dto.response.ProductResponse;
+import org.springframework.data.domain.Pageable;
+import org.springframework.web.multipart.MultipartFile;
+import java.util.List;
+
+public interface ProductService {
+    PageResponse<ProductResponse> getProducts(Pageable pageable, String keyword, Long categoryId);
+    ProductResponse getProductById(Long id);
+    ProductResponse getProductBySlug(String slug);
+    ProductResponse createProduct(ProductRequest request, List<MultipartFile> images); // đổi
+    ProductResponse updateProduct(Long id, ProductRequest request, List<MultipartFile> images); // đổi
+    void deleteProduct(Long id);
+}

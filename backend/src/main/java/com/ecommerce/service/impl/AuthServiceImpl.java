@@ -1,0 +1,111 @@
+package com.ecommerce.service.impl;
+
+import com.ecommerce.dto.request.LoginRequest;
+import com.ecommerce.dto.request.RegisterRequest;
+import com.ecommerce.dto.response.AuthResponse;
+import com.ecommerce.dto.response.UserResponse;
+import com.ecommerce.entity.User;
+import com.ecommerce.enums.Role;
+import com.ecommerce.exception.BusinessException;
+import com.ecommerce.repository.UserRepository;
+import com.ecommerce.security.JwtService;
+import com.ecommerce.service.AuthService;
+import lombok.RequiredArgsConstructor;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+
+@Service
+@RequiredArgsConstructor
+public class AuthServiceImpl implements AuthService {
+
+    private final UserRepository userRepository;
+    private final PasswordEncoder passwordEncoder;
+    private final JwtService jwtService;
+    private final AuthenticationManager authenticationManager;
+    private final UserDetailsService userDetailsService;
+
+    @Override
+    public AuthResponse register(RegisterRequest request) {
+        if (userRepository.existsByEmail(request.getEmail())) {
+            throw new BusinessException("Email đã được sử dụng");
+        }
+
+        User user = User.builder()
+            .fullName(request.getFullName())
+            .email(request.getEmail())
+            .password(passwordEncoder.encode(request.getPassword()))
+            .phone(request.getPhone())
+            .role(Role.USER)
+            .enabled(true)
+            .build();
+
+        userRepository.save(user);
+
+        UserDetails userDetails = userDetailsService.loadUserByUsername(user.getEmail());
+        String accessToken  = jwtService.generateAccessToken(userDetails);
+        String refreshToken = jwtService.generateRefreshToken(userDetails);
+
+        return AuthResponse.builder()
+            .accessToken(accessToken)
+            .refreshToken(refreshToken)
+            .user(toUserResponse(user))
+            .build();
+    }
+
+    @Override
+    public AuthResponse login(LoginRequest request) {
+        authenticationManager.authenticate(
+            new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword())
+        );
+
+        User user = userRepository.findByEmail(request.getEmail())
+            .orElseThrow(() -> new BusinessException("Không tìm thấy tài khoản"));
+
+        UserDetails userDetails = userDetailsService.loadUserByUsername(user.getEmail());
+        String accessToken  = jwtService.generateAccessToken(userDetails);
+        String refreshToken = jwtService.generateRefreshToken(userDetails);
+
+        return AuthResponse.builder()
+            .accessToken(accessToken)
+            .refreshToken(refreshToken)
+            .user(toUserResponse(user))
+            .build();
+    }
+
+    @Override
+    public AuthResponse refreshToken(String refreshToken) {
+        String email = jwtService.extractUsername(refreshToken);
+        UserDetails userDetails = userDetailsService.loadUserByUsername(email);
+
+        if (!jwtService.isTokenValid(refreshToken, userDetails)) {
+            throw new BusinessException("Refresh token không hợp lệ hoặc đã hết hạn");
+        }
+
+        String newAccessToken = jwtService.generateAccessToken(userDetails);
+        User user = userRepository.findByEmail(email)
+            .orElseThrow(() -> new BusinessException("User không tồn tại"));
+
+        return AuthResponse.builder()
+            .accessToken(newAccessToken)
+            .refreshToken(refreshToken)
+            .user(toUserResponse(user))
+            .build();
+    }
+
+    private UserResponse toUserResponse(User user) {
+        return UserResponse.builder()
+            .id(user.getId())
+            .fullName(user.getFullName())
+            .email(user.getEmail())
+            .phone(user.getPhone())
+            .address(user.getAddress())
+            .role(user.getRole().name())
+            .enabled(user.getEnabled())
+            .createdAt(user.getCreatedAt())
+            .build();
+    }
+}
