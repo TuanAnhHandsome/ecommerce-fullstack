@@ -17,17 +17,23 @@ public class CloudinaryService {
 
     private final Cloudinary cloudinary;
 
+    /** Upload vào folder mặc định: ecommerce/products */
     public String uploadImage(MultipartFile file) {
+        return uploadImage(file, "ecommerce/products");
+    }
+
+    /** Upload vào folder tuỳ chỉnh — dùng cho ảnh biến thể */
+    public String uploadImage(MultipartFile file, String folder) {
         try {
             Map result = cloudinary.uploader().upload(
                 file.getBytes(),
                 ObjectUtils.asMap(
-                    "folder",        "ecommerce/products",
+                    "folder",        folder,
                     "resource_type", "auto"
                 )
             );
             String url = (String) result.get("secure_url");
-            log.info("Uploaded to Cloudinary: {}", url);
+            log.info("Uploaded to Cloudinary [{}]: {}", folder, url);
             return url;
         } catch (IOException e) {
             throw new RuntimeException("Upload ảnh thất bại: " + e.getMessage());
@@ -46,15 +52,11 @@ public class CloudinaryService {
     }
 
     private String extractPublicId(String imageUrl) {
-        // URL: https://res.cloudinary.com/cloud/image/upload/v123456/ecommerce/products/abc.jpg
-        // public_id cần: ecommerce/products/abc
         int uploadIndex = imageUrl.indexOf("/upload/");
         String afterUpload = imageUrl.substring(uploadIndex + 8);
-        // Bỏ version (v1234567/)
         if (afterUpload.matches("v\\d+/.*")) {
             afterUpload = afterUpload.substring(afterUpload.indexOf("/") + 1);
         }
-        // Bỏ extension (.jpg, .png, ...)
         return afterUpload.substring(0, afterUpload.lastIndexOf("."));
     }
 }

@@ -132,7 +132,7 @@ export default function OrderDetailPage() {
               <div key={i} className="flex gap-3 items-center py-2 border-b border-gray-50 last:border-0">
                 <div className="w-14 h-14 bg-gray-100 rounded-xl flex-shrink-0 overflow-hidden">
                   {item.productImg
-                    ? <img src={item.productImg} className="w-full h-full object-cover" />
+                    ? <img src={item.productImg} className="w-full h-full object-cover" crossOrigin="anonymous" />
                     : <div className="w-full h-full flex items-center justify-center">
                         <i className="fa-solid fa-image text-gray-300 text-xl"></i>
                       </div>

@@ -55,6 +55,7 @@ export const authAPI = {
 export const productAPI = {
   getAll:    (params) => api.get('/products', { params }),
   getById:   (id)     => api.get(`/products/${id}`),
+  getReviews: (productId, params) => api.get(`/products/${productId}/reviews`, { params }),
   getBySlug: (slug)   => api.get(`/products/slug/${slug}`),
   create: (formData)  => api.post('/products', formData, {
     headers: { 'Content-Type': 'multipart/form-data' }
@@ -104,4 +105,17 @@ export const userAPI = {
   getProfile:     ()     => api.get('/user/profile'),
   updateProfile:  (data) => api.put('/user/profile', data),
   changePassword: (data) => api.put('/user/change-password', data),
+}
+
+export const variantAPI = {
+  getByProduct: (productId) =>
+    api.get(`/products/${productId}`),
+
+  save: (productId, formData) =>
+    api.post(`/products/${productId}/variants`, formData, {  // ← phải là "api" không phải "axios"
+      headers: { 'Content-Type': 'multipart/form-data' }
+    }),
+
+  deleteAll: (productId) =>
+    api.delete(`/products/${productId}/variants`),
 }

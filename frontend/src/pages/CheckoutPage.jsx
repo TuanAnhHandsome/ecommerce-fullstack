@@ -161,7 +161,7 @@ export default function CheckoutPage() {
               <div key={item.productId} className="flex gap-3">
                 <div className="w-12 h-12 bg-gray-100 rounded-lg flex-shrink-0 overflow-hidden">
                   {item.productImage
-                    ? <img src={item.productImage} className="w-full h-full object-cover" />
+                    ? <img src={item.productImage} className="w-full h-full object-cover" crossOrigin="anonymous" />
                     : <div className="w-full h-full flex items-center justify-center">
                         <i className="fa-solid fa-image text-gray-300"></i>
                       </div>

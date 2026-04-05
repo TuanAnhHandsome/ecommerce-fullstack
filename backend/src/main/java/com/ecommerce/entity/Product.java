@@ -5,7 +5,6 @@ import lombok.*;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.LastModifiedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
-
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -14,11 +13,7 @@ import java.util.List;
 @Entity
 @Table(name = "products")
 @EntityListeners(AuditingEntityListener.class)
-@Getter
-@Setter
-@NoArgsConstructor
-@AllArgsConstructor
-@Builder
+@Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
 public class Product {
 
     @Id
@@ -64,22 +59,18 @@ public class Product {
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
-    @Transient
-    public BigDecimal getEffectivePrice() {
-        return (salePrice != null) ? salePrice : price;
-    }
-
-    // Thêm vào class Product (giữ nguyên imageUrl cũ)
-
-    @OneToMany(mappedBy = "product", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @OneToMany(mappedBy = "product", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("sortOrder ASC")
+    @Builder.Default
     private List<ProductImage> images = new ArrayList<>();
 
-    // Convenience method — ảnh đầu tiên làm thumbnail
+    @OneToMany(mappedBy = "product", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("sortOrder ASC")
+    @Builder.Default
+    private List<ProductVariant> variants = new ArrayList<>();
+
     @Transient
-    public String getPrimaryImageUrl() {
-        if (images != null && !images.isEmpty())
-            return images.get(0).getUrl();
-        return imageUrl; // fallback ảnh cũ
+    public BigDecimal getEffectivePrice() {
+        return salePrice != null ? salePrice : price;
     }
 }

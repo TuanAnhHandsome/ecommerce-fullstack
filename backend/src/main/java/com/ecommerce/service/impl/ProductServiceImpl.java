@@ -3,13 +3,9 @@ package com.ecommerce.service.impl;
 import com.ecommerce.dto.request.ProductRequest;
 import com.ecommerce.dto.response.PageResponse;
 import com.ecommerce.dto.response.ProductResponse;
-import com.ecommerce.entity.Category;
-import com.ecommerce.entity.Product;
-import com.ecommerce.entity.ProductImage;
+import com.ecommerce.entity.*;
 import com.ecommerce.exception.ResourceNotFoundException;
-import com.ecommerce.repository.CategoryRepository;
-import com.ecommerce.repository.ProductImageRepository;
-import com.ecommerce.repository.ProductRepository;
+import com.ecommerce.repository.*;
 import com.ecommerce.service.CloudinaryService;
 import com.ecommerce.service.ProductService;
 import lombok.RequiredArgsConstructor;
@@ -21,7 +17,9 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.text.Normalizer;
 import java.util.List;
+import java.util.Map;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -31,11 +29,13 @@ public class ProductServiceImpl implements ProductService {
     private final ProductRepository productRepository;
     private final CategoryRepository categoryRepository;
     private final ProductImageRepository productImageRepository;
+    private final VariantOptionRepository variantOptionRepository;
+    private final ProductVariantRepository variantRepository;
+    private final ReviewRepository reviewRepository;
     private final CloudinaryService cloudinaryService;
 
-    // ── Public read ──────────────────────────────────────────────
-
     @Override
+    @Transactional(readOnly = true)
     public PageResponse<ProductResponse> getProducts(Pageable pageable, String keyword, Long categoryId) {
         return PageResponse.of(
                 productRepository.searchProducts(keyword, categoryId, pageable)
@@ -43,29 +43,27 @@ public class ProductServiceImpl implements ProductService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public ProductResponse getProductById(Long id) {
         return toResponse(findById(id));
     }
 
     @Override
+    @Transactional(readOnly = true)
     public ProductResponse getProductBySlug(String slug) {
-        return toResponse(
-                productRepository.findBySlug(slug)
-                        .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy sản phẩm: " + slug)));
+        return toResponse(productRepository.findBySlug(slug)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy sản phẩm: " + slug)));
     }
-
-    // ── Create ───────────────────────────────────────────────────
 
     @Override
     @Transactional
     public ProductResponse createProduct(ProductRequest request, List<MultipartFile> images) {
         Category category = findCategory(request.getCategoryId());
-        String slug = generateSlug(request.getName());
 
         Product product = Product.builder()
                 .category(category)
                 .name(request.getName())
-                .slug(slug)
+                .slug(generateSlug(request.getName()))
                 .description(request.getDescription())
                 .price(request.getPrice())
                 .salePrice(request.getSalePrice())
@@ -78,14 +76,11 @@ public class ProductServiceImpl implements ProductService {
 
         if (images != null && !images.isEmpty()) {
             saveImages(saved, images);
-            // Reload để lấy imageUrl đã được sync
             saved = productRepository.findById(saved.getId()).orElseThrow();
         }
 
         return toResponse(saved);
     }
-
-    // ── Update ───────────────────────────────────────────────────
 
     @Override
     @Transactional
@@ -102,26 +97,21 @@ public class ProductServiceImpl implements ProductService {
         product.setSku(request.getSku());
         product.setActive(request.getActive() != null ? request.getActive() : true);
 
-        // Xoá ảnh được chỉ định
         if (request.getDeletedImageIds() != null && !request.getDeletedImageIds().isEmpty()) {
             List<ProductImage> toDelete = productImageRepository.findAllById(request.getDeletedImageIds());
             toDelete.forEach(img -> cloudinaryService.deleteImage(img.getUrl()));
             productImageRepository.deleteByIdIn(request.getDeletedImageIds());
         }
 
-        // Upload ảnh mới
         if (images != null && !images.isEmpty()) {
             saveImages(product, images);
         }
 
-        // Sync imageUrl = ảnh đầu tiên còn lại
         List<ProductImage> remaining = productImageRepository.findByProductIdOrderBySortOrder(product.getId());
         product.setImageUrl(remaining.isEmpty() ? null : remaining.get(0).getUrl());
 
         return toResponse(productRepository.save(product));
     }
-
-    // ── Delete (soft) ────────────────────────────────────────────
 
     @Override
     @Transactional
@@ -131,7 +121,7 @@ public class ProductServiceImpl implements ProductService {
         productRepository.save(product);
     }
 
-    // ── Private helpers ──────────────────────────────────────────
+    // ── Helpers ──────────────────────────────────────────────
 
     private void saveImages(Product product, List<MultipartFile> files) {
         List<ProductImage> existing = productImageRepository.findByProductIdOrderBySortOrder(product.getId());
@@ -140,13 +130,9 @@ public class ProductServiceImpl implements ProductService {
         for (int i = 0; i < files.size(); i++) {
             String url = cloudinaryService.uploadImage(files.get(i));
             productImageRepository.save(ProductImage.builder()
-                    .product(product)
-                    .url(url)
-                    .sortOrder(startOrder + i)
-                    .build());
+                    .product(product).url(url).sortOrder(startOrder + i).build());
         }
 
-        // Sync imageUrl = ảnh đầu tiên (thumbnail backward compat)
         if (startOrder == 0) {
             List<ProductImage> all = productImageRepository.findByProductIdOrderBySortOrder(product.getId());
             if (!all.isEmpty()) {
@@ -157,16 +143,59 @@ public class ProductServiceImpl implements ProductService {
     }
 
     private ProductResponse toResponse(Product p) {
+        // ── Ảnh sản phẩm ──────────────────────────────────────
         List<String> imageUrls = productImageRepository
                 .findByProductIdOrderBySortOrder(p.getId())
-                .stream()
-                .map(ProductImage::getUrl)
-                .toList();
+                .stream().map(ProductImage::getUrl).toList();
 
-        // Fallback nếu chưa migrate ảnh cũ
         if (imageUrls.isEmpty() && p.getImageUrl() != null) {
             imageUrls = List.of(p.getImageUrl());
         }
+
+        // ── Review summary ─────────────────────────────────────
+        Double avg = reviewRepository.avgRatingByProduct(p.getId());
+        Integer reviewCount = reviewRepository.countByProduct(p.getId());
+
+        // ── Variant options (dùng EntityGraph — fetch values luôn) ──
+        List<ProductResponse.VariantOptionResponse> variantOptions = variantOptionRepository
+                .findByProductIdOrderBySortOrder(p.getId())
+                .stream().map(opt -> ProductResponse.VariantOptionResponse.builder()
+                        .id(opt.getId())
+                        .name(opt.getName())
+                        .sortOrder(opt.getSortOrder())
+                        .values(opt.getValues().stream()
+                                .map(v -> ProductResponse.VariantOptionResponse.ValueItem.builder()
+                                        .id(v.getId()).value(v.getValue()).sortOrder(v.getSortOrder()).build())
+                                .toList())
+                        .build())
+                .toList();
+
+        // ── Variants: fetch values và images bằng 2 query riêng ──
+        List<ProductVariant> variantsWithValues =
+                variantRepository.findByProductIdWithValues(p.getId());
+
+        Map<Long, List<String>> imagesMap =
+                variantRepository.findByProductIdWithImages(p.getId()).stream()
+                        .collect(Collectors.toMap(
+                                ProductVariant::getId,
+                                v -> v.getImages().stream().map(VariantImage::getUrl).toList()
+                        ));
+
+        List<ProductResponse.VariantSkuResponse> variants = variantsWithValues.stream()
+                .map(v -> ProductResponse.VariantSkuResponse.builder()
+                        .id(v.getId())
+                        .sku(v.getSku())
+                        .price(v.getPrice())
+                        .salePrice(v.getSalePrice())
+                        .effectivePrice(v.getEffectivePrice())
+                        .stockQty(v.getStockQty())
+                        .active(v.getActive())
+                        .sortOrder(v.getSortOrder())
+                        .valueLabels(v.getVariantValues().stream()
+                                .map(VariantValue::getValue).toList())
+                        .images(imagesMap.getOrDefault(v.getId(), List.of()))
+                        .build())
+                .toList();
 
         return ProductResponse.builder()
                 .id(p.getId())
@@ -184,6 +213,11 @@ public class ProductServiceImpl implements ProductService {
                 .sku(p.getSku())
                 .active(p.getActive())
                 .createdAt(p.getCreatedAt())
+                .avgRating(avg != null ? Math.round(avg * 10.0) / 10.0 : null)
+                .reviewCount(reviewCount != null ? reviewCount : 0)
+                .soldCount(null)
+                .variantOptions(variantOptions)
+                .variants(variants)
                 .build();
     }
 
@@ -199,8 +233,8 @@ public class ProductServiceImpl implements ProductService {
 
     private String generateSlug(String name) {
         String normalized = Normalizer.normalize(name, Normalizer.Form.NFD);
-        Pattern pattern = Pattern.compile("\\p{InCombiningDiacriticalMarks}+");
-        String slug = pattern.matcher(normalized).replaceAll("")
+        String slug = Pattern.compile("\\p{InCombiningDiacriticalMarks}+")
+                .matcher(normalized).replaceAll("")
                 .toLowerCase()
                 .replace("đ", "d")
                 .replaceAll("[^a-z0-9\\s-]", "")
@@ -208,11 +242,10 @@ public class ProductServiceImpl implements ProductService {
                 .replaceAll("-+", "-")
                 .trim();
 
-        String baseSlug = slug;
+        String base = slug;
         int count = 1;
-        while (productRepository.existsBySlug(slug)) {
-            slug = baseSlug + "-" + count++;
-        }
+        while (productRepository.existsBySlug(slug))
+            slug = base + "-" + count++;
         return slug;
     }
 }

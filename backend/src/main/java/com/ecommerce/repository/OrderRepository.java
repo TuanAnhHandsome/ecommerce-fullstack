@@ -43,4 +43,19 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
            "FROM orders WHERE status = 'PAID' AND created_at >= :since " +
            "GROUP BY DATE(created_at) ORDER BY date ASC", nativeQuery = true)
     List<Object[]> getRevenueGroupByDay(LocalDateTime since);
+
+    // Thêm method này vào OrderRepository hiện có
+
+@Query("""
+    SELECT o FROM Order o
+    JOIN o.orderItems oi
+    WHERE o.user.id = :userId
+      AND oi.product.id = :productId
+      AND o.status = 'DELIVERED'
+    ORDER BY o.createdAt DESC
+    LIMIT 1
+""")
+Optional<Order> findDeliveredOrderContainingProduct(
+    @Param("userId") Long userId,
+    @Param("productId") Long productId);
 }

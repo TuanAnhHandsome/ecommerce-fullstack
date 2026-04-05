@@ -40,7 +40,7 @@ export default function CartPage() {
             <div key={item.productId} className="card p-4 flex gap-4">
               <div className="w-20 h-20 bg-gray-100 rounded-xl overflow-hidden flex-shrink-0">
                 {item.productImage
-                  ? <img src={item.productImage} alt={item.productName} className="w-full h-full object-cover" />
+                  ? <img src={item.productImage} alt={item.productName} className="w-full h-full object-cover" crossOrigin="anonymous"/>
                   : <div className="w-full h-full flex items-center justify-center">
                       <i className="fa-solid fa-image text-2xl text-gray-300"></i>
                     </div>
