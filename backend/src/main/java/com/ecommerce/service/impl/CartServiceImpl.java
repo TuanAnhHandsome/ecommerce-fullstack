@@ -118,6 +118,7 @@ public class CartServiceImpl implements CartService {
             .map(item -> CartResponse.CartItemResponse.builder()
                 .productId(item.getProduct().getId())
                 .productName(item.getProduct().getName())
+                .productSlug(item.getProduct().getSlug()) 
                 .productImage(item.getProduct().getImageUrl())
                 .unitPrice(item.getProduct().getEffectivePrice())
                 .quantity(item.getQuantity())

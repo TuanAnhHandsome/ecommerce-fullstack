@@ -4,6 +4,7 @@ import lombok.*;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 @Data @Builder @NoArgsConstructor @AllArgsConstructor
 public class ProductResponse {
@@ -30,6 +31,23 @@ public class ProductResponse {
 
     private List<VariantOptionResponse> variantOptions;
     private List<VariantSkuResponse> variants;
+
+    // ── MỚI ──────────────────────────────────────────────────────────────────
+    /**
+     * Thông số kỹ thuật đã được nhóm lại:
+     *   { "Cấu hình": [ {key,value}, … ], "Màn hình": [ … ] }
+     *
+     * Dùng LinkedHashMap để giữ thứ tự nhóm như trong DB.
+     */
+    private Map<String, List<SpecItem>> specs;
+
+    @Data @Builder @NoArgsConstructor @AllArgsConstructor
+    public static class SpecItem {
+        private String key;
+        private String value;
+        private Integer sortOrder;
+    }
+    // ─────────────────────────────────────────────────────────────────────────
 
     @Data @Builder @NoArgsConstructor @AllArgsConstructor
     public static class VariantOptionResponse {

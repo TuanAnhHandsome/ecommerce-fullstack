@@ -5,7 +5,14 @@ import com.ecommerce.dto.request.RegisterRequest;
 import com.ecommerce.dto.response.AuthResponse;
 
 public interface AuthService {
+
     AuthResponse register(RegisterRequest request);
+
     AuthResponse login(LoginRequest request);
+
     AuthResponse refreshToken(String refreshToken);
+
+    void sendOtp(String email);
+
+    boolean verifyOtp(String email, String otp);
 }

@@ -3,6 +3,7 @@ package com.ecommerce.service.impl;
 import com.ecommerce.dto.request.ProductRequest;
 import com.ecommerce.dto.response.PageResponse;
 import com.ecommerce.dto.response.ProductResponse;
+import com.ecommerce.dto.response.ProductResponse.SpecItem;
 import com.ecommerce.entity.*;
 import com.ecommerce.exception.ResourceNotFoundException;
 import com.ecommerce.repository.*;
@@ -11,13 +12,14 @@ import com.ecommerce.service.ProductService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.math.BigDecimal;
 import java.text.Normalizer;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
@@ -26,20 +28,32 @@ import java.util.stream.Collectors;
 @Slf4j
 public class ProductServiceImpl implements ProductService {
 
-    private final ProductRepository productRepository;
-    private final CategoryRepository categoryRepository;
-    private final ProductImageRepository productImageRepository;
-    private final VariantOptionRepository variantOptionRepository;
+    private final ProductRepository        productRepository;
+    private final CategoryRepository       categoryRepository;
+    private final ProductImageRepository   productImageRepository;
+    private final VariantOptionRepository  variantOptionRepository;
     private final ProductVariantRepository variantRepository;
-    private final ReviewRepository reviewRepository;
-    private final CloudinaryService cloudinaryService;
+    private final ReviewRepository         reviewRepository;
+    private final CloudinaryService        cloudinaryService;
+    private final ProductSpecRepository    productSpecRepository;   // ← MỚI
+
+    // ── Read ──────────────────────────────────────────────────────────────────
 
     @Override
     @Transactional(readOnly = true)
-    public PageResponse<ProductResponse> getProducts(Pageable pageable, String keyword, Long categoryId) {
+    public PageResponse<ProductResponse> getProducts(
+            Pageable pageable, String keyword, Long categoryId,
+            BigDecimal minPrice, BigDecimal maxPrice) {
+
+        Specification<Product> spec = Specification
+                .where(ProductSpecification.isActive())
+                .and(ProductSpecification.hasKeyword(keyword))
+                .and(ProductSpecification.hasCategory(categoryId))
+                .and(ProductSpecification.minPrice(minPrice))
+                .and(ProductSpecification.maxPrice(maxPrice));
+
         return PageResponse.of(
-                productRepository.searchProducts(keyword, categoryId, pageable)
-                        .map(this::toResponse));
+                productRepository.findAll(spec, pageable).map(this::toResponse));
     }
 
     @Override
@@ -54,6 +68,8 @@ public class ProductServiceImpl implements ProductService {
         return toResponse(productRepository.findBySlug(slug)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy sản phẩm: " + slug)));
     }
+
+    // ── Write ─────────────────────────────────────────────────────────────────
 
     @Override
     @Transactional
@@ -74,10 +90,14 @@ public class ProductServiceImpl implements ProductService {
 
         Product saved = productRepository.save(product);
 
+        // Ảnh
         if (images != null && !images.isEmpty()) {
             saveImages(saved, images);
             saved = productRepository.findById(saved.getId()).orElseThrow();
         }
+
+        // Specs ── MỚI
+        saveSpecs(saved, request.getSpecs());
 
         return toResponse(saved);
     }
@@ -97,18 +117,24 @@ public class ProductServiceImpl implements ProductService {
         product.setSku(request.getSku());
         product.setActive(request.getActive() != null ? request.getActive() : true);
 
+        // Xóa ảnh được chọn
         if (request.getDeletedImageIds() != null && !request.getDeletedImageIds().isEmpty()) {
             List<ProductImage> toDelete = productImageRepository.findAllById(request.getDeletedImageIds());
             toDelete.forEach(img -> cloudinaryService.deleteImage(img.getUrl()));
             productImageRepository.deleteByIdIn(request.getDeletedImageIds());
         }
 
+        // Thêm ảnh mới
         if (images != null && !images.isEmpty()) {
             saveImages(product, images);
         }
 
+        // Cập nhật imageUrl
         List<ProductImage> remaining = productImageRepository.findByProductIdOrderBySortOrder(product.getId());
         product.setImageUrl(remaining.isEmpty() ? null : remaining.get(0).getUrl());
+
+        // Specs replace-all ── MỚI
+        saveSpecs(product, request.getSpecs());
 
         return toResponse(productRepository.save(product));
     }
@@ -121,42 +147,49 @@ public class ProductServiceImpl implements ProductService {
         productRepository.save(product);
     }
 
-    // ── Helpers ──────────────────────────────────────────────
+    // ── Specs helper ──────────────────────────────────────────────────────────
 
-    private void saveImages(Product product, List<MultipartFile> files) {
-        List<ProductImage> existing = productImageRepository.findByProductIdOrderBySortOrder(product.getId());
-        int startOrder = existing.size();
+    /**
+     * Replace-all: xóa specs cũ → insert mới.
+     * Đơn giản và không bị conflict thứ tự.
+     */
+    private void saveSpecs(Product product, List<ProductRequest.SpecItem> specItems) {
+        productSpecRepository.deleteByProductId(product.getId());
+        if (specItems == null || specItems.isEmpty()) return;
 
-        for (int i = 0; i < files.size(); i++) {
-            String url = cloudinaryService.uploadImage(files.get(i));
-            productImageRepository.save(ProductImage.builder()
-                    .product(product).url(url).sortOrder(startOrder + i).build());
+        List<ProductSpec> entities = new ArrayList<>();
+        for (int i = 0; i < specItems.size(); i++) {
+            ProductRequest.SpecItem item = specItems.get(i);
+            if (item.getKey() == null || item.getKey().isBlank()) continue;
+            if (item.getValue() == null || item.getValue().isBlank()) continue;
+
+            entities.add(ProductSpec.builder()
+                    .product(product)
+                    .specGroup(item.getGroup() != null ? item.getGroup().trim() : "Thông số kỹ thuật")
+                    .specKey(item.getKey().trim())
+                    .specValue(item.getValue().trim())
+                    .sortOrder(item.getSortOrder() != null ? item.getSortOrder() : i)
+                    .build());
         }
-
-        if (startOrder == 0) {
-            List<ProductImage> all = productImageRepository.findByProductIdOrderBySortOrder(product.getId());
-            if (!all.isEmpty()) {
-                product.setImageUrl(all.get(0).getUrl());
-                productRepository.save(product);
-            }
-        }
+        productSpecRepository.saveAll(entities);
     }
 
+    // ── toResponse ────────────────────────────────────────────────────────────
+
     private ProductResponse toResponse(Product p) {
-        // ── Ảnh sản phẩm ──────────────────────────────────────
+        // Ảnh sản phẩm
         List<String> imageUrls = productImageRepository
                 .findByProductIdOrderBySortOrder(p.getId())
                 .stream().map(ProductImage::getUrl).toList();
-
         if (imageUrls.isEmpty() && p.getImageUrl() != null) {
             imageUrls = List.of(p.getImageUrl());
         }
 
-        // ── Review summary ─────────────────────────────────────
-        Double avg = reviewRepository.avgRatingByProduct(p.getId());
+        // Review summary
+        Double  avg         = reviewRepository.avgRatingByProduct(p.getId());
         Integer reviewCount = reviewRepository.countByProduct(p.getId());
 
-        // ── Variant options (dùng EntityGraph — fetch values luôn) ──
+        // Variant options
         List<ProductResponse.VariantOptionResponse> variantOptions = variantOptionRepository
                 .findByProductIdOrderBySortOrder(p.getId())
                 .stream().map(opt -> ProductResponse.VariantOptionResponse.builder()
@@ -170,32 +203,36 @@ public class ProductServiceImpl implements ProductService {
                         .build())
                 .toList();
 
-        // ── Variants: fetch values và images bằng 2 query riêng ──
-        List<ProductVariant> variantsWithValues =
-                variantRepository.findByProductIdWithValues(p.getId());
-
-        Map<Long, List<String>> imagesMap =
-                variantRepository.findByProductIdWithImages(p.getId()).stream()
-                        .collect(Collectors.toMap(
-                                ProductVariant::getId,
-                                v -> v.getImages().stream().map(VariantImage::getUrl).toList()
-                        ));
+        // Variants
+        List<ProductVariant> variantsWithValues = variantRepository.findByProductIdWithValues(p.getId());
+        Map<Long, List<String>> imagesMap = variantRepository.findByProductIdWithImages(p.getId()).stream()
+                .collect(Collectors.toMap(
+                        ProductVariant::getId,
+                        v -> v.getImages().stream().map(VariantImage::getUrl).toList()
+                ));
 
         List<ProductResponse.VariantSkuResponse> variants = variantsWithValues.stream()
                 .map(v -> ProductResponse.VariantSkuResponse.builder()
-                        .id(v.getId())
-                        .sku(v.getSku())
-                        .price(v.getPrice())
-                        .salePrice(v.getSalePrice())
-                        .effectivePrice(v.getEffectivePrice())
-                        .stockQty(v.getStockQty())
-                        .active(v.getActive())
-                        .sortOrder(v.getSortOrder())
-                        .valueLabels(v.getVariantValues().stream()
-                                .map(VariantValue::getValue).toList())
+                        .id(v.getId()).sku(v.getSku()).price(v.getPrice())
+                        .salePrice(v.getSalePrice()).effectivePrice(v.getEffectivePrice())
+                        .stockQty(v.getStockQty()).active(v.getActive()).sortOrder(v.getSortOrder())
+                        .valueLabels(v.getVariantValues().stream().map(VariantValue::getValue).toList())
                         .images(imagesMap.getOrDefault(v.getId(), List.of()))
                         .build())
                 .toList();
+
+        // ── Specs ── MỚI ─────────────────────────────────────────────────────
+        // Group theo specGroup, giữ thứ tự bằng LinkedHashMap
+        Map<String, List<SpecItem>> specsMap = new LinkedHashMap<>();
+        productSpecRepository.findByProductIdOrdered(p.getId()).forEach(s -> {
+            specsMap.computeIfAbsent(s.getSpecGroup(), k -> new ArrayList<>())
+                    .add(SpecItem.builder()
+                            .key(s.getSpecKey())
+                            .value(s.getSpecValue())
+                            .sortOrder(s.getSortOrder())
+                            .build());
+        });
+        // ─────────────────────────────────────────────────────────────────────
 
         return ProductResponse.builder()
                 .id(p.getId())
@@ -218,7 +255,29 @@ public class ProductServiceImpl implements ProductService {
                 .soldCount(null)
                 .variantOptions(variantOptions)
                 .variants(variants)
+                .specs(specsMap)    // ← MỚI
                 .build();
+    }
+
+    // ── Utils ─────────────────────────────────────────────────────────────────
+
+    private void saveImages(Product product, List<MultipartFile> files) {
+        List<ProductImage> existing = productImageRepository.findByProductIdOrderBySortOrder(product.getId());
+        int startOrder = existing.size();
+
+        for (int i = 0; i < files.size(); i++) {
+            String url = cloudinaryService.uploadImage(files.get(i));
+            productImageRepository.save(ProductImage.builder()
+                    .product(product).url(url).sortOrder(startOrder + i).build());
+        }
+
+        if (startOrder == 0) {
+            List<ProductImage> all = productImageRepository.findByProductIdOrderBySortOrder(product.getId());
+            if (!all.isEmpty()) {
+                product.setImageUrl(all.get(0).getUrl());
+                productRepository.save(product);
+            }
+        }
     }
 
     private Product findById(Long id) {

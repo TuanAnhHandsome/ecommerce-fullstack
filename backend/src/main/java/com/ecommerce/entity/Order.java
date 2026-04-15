@@ -15,7 +15,11 @@ import java.util.List;
 @Entity
 @Table(name = "orders")
 @EntityListeners(AuditingEntityListener.class)
-@Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
 public class Order {
 
     @Id
@@ -74,4 +78,7 @@ public class Order {
 
     @OneToOne(mappedBy = "order", cascade = CascadeType.ALL, fetch = FetchType.EAGER)
     private Payment payment;
+
+    @Column(name = "coupon_code", length = 50)
+    private String couponCode;
 }

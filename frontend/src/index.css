@@ -21,3 +21,6 @@
     @apply bg-white rounded-xl shadow-sm border border-gray-100;
   }
 }
+@keyframes ripple {
+  to { transform: scale(3); opacity: 0; }
+}

@@ -7,6 +7,7 @@ import java.util.List;
 
 @Data @NoArgsConstructor @AllArgsConstructor
 public class ProductRequest {
+
     @NotBlank(message = "Tên sản phẩm không được để trống")
     @Size(max = 255)
     private String name;
@@ -31,6 +32,31 @@ public class ProductRequest {
     private String sku;
 
     private Boolean active = true;
-    private List<Long> deletedImageIds; // id ảnh cũ cần xoá
-}
 
+    /** IDs ảnh cũ cần xóa */
+    private List<Long> deletedImageIds;
+
+    // ── MỚI: Thông số kỹ thuật ───────────────────────────────────────────────
+    /**
+     * Danh sách thông số kỹ thuật.
+     * Frontend gửi toàn bộ list → backend replace-all.
+     */
+    private List<SpecItem> specs;
+
+    @Data @NoArgsConstructor @AllArgsConstructor
+    public static class SpecItem {
+        /** Nhóm — VD: "Cấu hình", "Màn hình" */
+        @NotBlank
+        private String group;
+
+        /** Tên thông số — VD: "CPU", "RAM" */
+        @NotBlank
+        private String key;
+
+        /** Giá trị — VD: "Apple A17 Pro", "8 GB" */
+        @NotBlank
+        private String value;
+
+        private Integer sortOrder;
+    }
+}

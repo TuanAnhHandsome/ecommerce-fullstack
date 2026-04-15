@@ -21,14 +21,12 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
     Page<Order> findByStatus(OrderStatus status, Pageable pageable);
     Long countByStatus(OrderStatus status);
 
-    // ✅ THÊM MỚI: JOIN FETCH user để tránh LazyInitializationException
     @Query("SELECT o FROM Order o LEFT JOIN FETCH o.user ORDER BY o.createdAt DESC")
     Page<Order> findAllWithUser(Pageable pageable);
 
     @Query("SELECT o FROM Order o LEFT JOIN FETCH o.user WHERE o.status = :status ORDER BY o.createdAt DESC")
     Page<Order> findAllWithUserByStatus(@Param("status") OrderStatus status, Pageable pageable);
 
-    // Giữ nguyên các query cũ
     @Query("SELECT SUM(o.finalAmount) FROM Order o WHERE o.status = 'PAID'")
     BigDecimal getTotalRevenue();
 
@@ -44,18 +42,34 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
            "GROUP BY DATE(created_at) ORDER BY date ASC", nativeQuery = true)
     List<Object[]> getRevenueGroupByDay(LocalDateTime since);
 
-    // Thêm method này vào OrderRepository hiện có
+    @Query("""
+        SELECT o FROM Order o
+        JOIN o.orderItems oi
+        WHERE o.user.id = :userId
+          AND oi.product.id = :productId
+          AND o.status = 'DELIVERED'
+        ORDER BY o.createdAt DESC
+        LIMIT 1
+    """)
+    Optional<Order> findDeliveredOrderContainingProduct(
+        @Param("userId") Long userId,
+        @Param("productId") Long productId);
 
-@Query("""
-    SELECT o FROM Order o
-    JOIN o.orderItems oi
-    WHERE o.user.id = :userId
-      AND oi.product.id = :productId
-      AND o.status = 'DELIVERED'
-    ORDER BY o.createdAt DESC
-    LIMIT 1
-""")
-Optional<Order> findDeliveredOrderContainingProduct(
-    @Param("userId") Long userId,
-    @Param("productId") Long productId);
+    // ── MỚI: Top sản phẩm bán chạy — dùng Pageable để tránh lỗi LIMIT với named param ──
+    @Query(value = """
+        SELECT oi.product_id,
+               p.name,
+               p.image_url,
+               SUM(oi.quantity)  AS total_sold,
+               SUM(oi.subtotal)  AS total_revenue
+        FROM   order_items oi
+        JOIN   orders      o ON o.id  = oi.order_id
+        JOIN   products    p ON p.id  = oi.product_id
+        WHERE  o.status IN ('PAID', 'PROCESSING', 'SHIPPED', 'DELIVERED')
+        GROUP  BY oi.product_id, p.name, p.image_url
+        ORDER  BY total_sold DESC
+        """,
+        countQuery = "SELECT COUNT(DISTINCT oi.product_id) FROM order_items oi",
+        nativeQuery = true)
+    Page<Object[]> getTopSellingProducts(Pageable pageable);
 }

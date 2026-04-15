@@ -10,6 +10,8 @@ import com.ecommerce.exception.BusinessException;
 import com.ecommerce.repository.UserRepository;
 import com.ecommerce.security.JwtService;
 import com.ecommerce.service.AuthService;
+import com.ecommerce.service.EmailService;
+import com.ecommerce.service.OtpStore;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -17,6 +19,8 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+
+import java.util.Random;
 
 @Service
 @RequiredArgsConstructor
@@ -27,21 +31,50 @@ public class AuthServiceImpl implements AuthService {
     private final JwtService jwtService;
     private final AuthenticationManager authenticationManager;
     private final UserDetailsService userDetailsService;
+    private final OtpStore otpStore;
+    private final EmailService emailService;
+
+    // ─────────────────────────────────────────────────────────────
+    // OTP
+    // ─────────────────────────────────────────────────────────────
+
+    @Override
+    public void sendOtp(String email) {
+        if (userRepository.existsByEmail(email)) {
+            throw new BusinessException("Email đã được sử dụng");
+        }
+        String otp = String.format("%06d", new Random().nextInt(1_000_000));
+        otpStore.save(email, otp);
+        emailService.sendOtpEmail(email, otp);
+    }
+
+    @Override
+    public boolean verifyOtp(String email, String otp) {
+        return otpStore.verify(email, otp);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Auth
+    // ─────────────────────────────────────────────────────────────
 
     @Override
     public AuthResponse register(RegisterRequest request) {
         if (userRepository.existsByEmail(request.getEmail())) {
             throw new BusinessException("Email đã được sử dụng");
         }
+        if (!otpStore.isVerified(request.getEmail())) {
+            throw new BusinessException("Vui lòng xác thực OTP trước khi đăng ký");
+        }
+        otpStore.clearVerified(request.getEmail());
 
         User user = User.builder()
-            .fullName(request.getFullName())
-            .email(request.getEmail())
-            .password(passwordEncoder.encode(request.getPassword()))
-            .phone(request.getPhone())
-            .role(Role.USER)
-            .enabled(true)
-            .build();
+                .fullName(request.getFullName())
+                .email(request.getEmail())
+                .password(passwordEncoder.encode(request.getPassword()))
+                .phone(request.getPhone())
+                .role(Role.USER)
+                .enabled(true)
+                .build();
 
         userRepository.save(user);
 
@@ -50,30 +83,30 @@ public class AuthServiceImpl implements AuthService {
         String refreshToken = jwtService.generateRefreshToken(userDetails);
 
         return AuthResponse.builder()
-            .accessToken(accessToken)
-            .refreshToken(refreshToken)
-            .user(toUserResponse(user))
-            .build();
+                .accessToken(accessToken)
+                .refreshToken(refreshToken)
+                .user(toUserResponse(user))
+                .build();
     }
 
     @Override
     public AuthResponse login(LoginRequest request) {
         authenticationManager.authenticate(
-            new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword())
+                new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword())
         );
 
         User user = userRepository.findByEmail(request.getEmail())
-            .orElseThrow(() -> new BusinessException("Không tìm thấy tài khoản"));
+                .orElseThrow(() -> new BusinessException("Không tìm thấy tài khoản"));
 
         UserDetails userDetails = userDetailsService.loadUserByUsername(user.getEmail());
         String accessToken  = jwtService.generateAccessToken(userDetails);
         String refreshToken = jwtService.generateRefreshToken(userDetails);
 
         return AuthResponse.builder()
-            .accessToken(accessToken)
-            .refreshToken(refreshToken)
-            .user(toUserResponse(user))
-            .build();
+                .accessToken(accessToken)
+                .refreshToken(refreshToken)
+                .user(toUserResponse(user))
+                .build();
     }
 
     @Override
@@ -87,25 +120,29 @@ public class AuthServiceImpl implements AuthService {
 
         String newAccessToken = jwtService.generateAccessToken(userDetails);
         User user = userRepository.findByEmail(email)
-            .orElseThrow(() -> new BusinessException("User không tồn tại"));
+                .orElseThrow(() -> new BusinessException("User không tồn tại"));
 
         return AuthResponse.builder()
-            .accessToken(newAccessToken)
-            .refreshToken(refreshToken)
-            .user(toUserResponse(user))
-            .build();
+                .accessToken(newAccessToken)
+                .refreshToken(refreshToken)
+                .user(toUserResponse(user))
+                .build();
     }
+
+    // ─────────────────────────────────────────────────────────────
+    // Helper
+    // ─────────────────────────────────────────────────────────────
 
     private UserResponse toUserResponse(User user) {
         return UserResponse.builder()
-            .id(user.getId())
-            .fullName(user.getFullName())
-            .email(user.getEmail())
-            .phone(user.getPhone())
-            .address(user.getAddress())
-            .role(user.getRole().name())
-            .enabled(user.getEnabled())
-            .createdAt(user.getCreatedAt())
-            .build();
+                .id(user.getId())
+                .fullName(user.getFullName())
+                .email(user.getEmail())
+                .phone(user.getPhone())
+                .address(user.getAddress())
+                .role(user.getRole().name())
+                .enabled(user.getEnabled())
+                .createdAt(user.getCreatedAt())
+                .build();
     }
 }

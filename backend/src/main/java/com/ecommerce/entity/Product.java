@@ -69,6 +69,13 @@ public class Product {
     @Builder.Default
     private List<ProductVariant> variants = new ArrayList<>();
 
+    // ── MỚI ──────────────────────────────────────────────────────────────────
+    @OneToMany(mappedBy = "product", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("specGroup ASC, sortOrder ASC")
+    @Builder.Default
+    private List<ProductSpec> specs = new ArrayList<>();
+    // ─────────────────────────────────────────────────────────────────────────
+
     @Transient
     public BigDecimal getEffectivePrice() {
         return salePrice != null ? salePrice : price;

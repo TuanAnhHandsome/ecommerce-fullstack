@@ -1,5 +1,3 @@
-// FILE: controller/ProductController.java
-// ================================================================
 package com.ecommerce.controller;
 
 import com.ecommerce.dto.request.ProductRequest;
@@ -15,6 +13,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+
+import java.math.BigDecimal;
 import java.util.List;
 
 @RestController
@@ -33,11 +33,14 @@ public class ProductController {
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) Long categoryId,
             @RequestParam(defaultValue = "createdAt") String sortBy,
-            @RequestParam(defaultValue = "desc") String sortDir) {
+            @RequestParam(defaultValue = "desc") String sortDir,
+            @RequestParam(required = false) BigDecimal minPrice,   // ← thêm
+            @RequestParam(required = false) BigDecimal maxPrice) { // ← thêm
 
         var pageable = PageRequest.of(page, size,
                 Sort.Direction.fromString(sortDir), sortBy);
-        return ResponseEntity.ok(productService.getProducts(pageable, keyword, categoryId));
+        return ResponseEntity.ok(
+                productService.getProducts(pageable, keyword, categoryId, minPrice, maxPrice));
     }
 
     @GetMapping("/{id}")

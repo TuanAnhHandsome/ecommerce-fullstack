@@ -22,6 +22,10 @@ import DashboardPage from './pages/admin/DashboardPage'
 import ProductsAdminPage from './pages/admin/ProductsAdminPage'
 import OrdersAdminPage from './pages/admin/OrdersAdminPage'
 import UsersAdminPage from './pages/admin/UsersAdminPage'
+import WarrantyAdminPage from './pages/admin/WarrantyAdminPage'
+import PromotionsAdminPage from './pages/admin/PromotionsAdminPage'
+import InventoryAdminPage from './pages/admin/InventoryAdminPage'
+
 
 function PrivateRoute({ children }) {
   const isAuthenticated = useAuthStore(s => s.isAuthenticated)
@@ -41,7 +45,7 @@ function AdminRoute({ children }) {
     try {
       const raw = localStorage.getItem('auth-store')
       if (raw) return JSON.parse(raw)?.state?.user
-    } catch {}
+    } catch { }
     return null
   })()
 
@@ -73,6 +77,9 @@ export default function App() {
         <Route path="/admin/products" element={<ProductsAdminPage />} />
         <Route path="/admin/orders" element={<OrdersAdminPage />} />
         <Route path="/admin/users" element={<UsersAdminPage />} />
+        <Route path="/admin/warranty" element={<WarrantyAdminPage />} />
+        <Route path="/admin/promotions" element={<PromotionsAdminPage />} />
+        <Route path="/admin/inventory" element={<InventoryAdminPage />} />
       </Route>
     </Routes>
   )

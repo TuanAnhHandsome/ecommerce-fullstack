@@ -1,8 +1,11 @@
 package com.ecommerce.service.impl;
 
 import com.ecommerce.dto.response.DashboardStatsResponse;
+import com.ecommerce.dto.response.DashboardStatsResponse.LowStockItem;
+import com.ecommerce.dto.response.DashboardStatsResponse.TopProduct;
 import com.ecommerce.dto.response.PageResponse;
 import com.ecommerce.dto.response.UserResponse;
+import com.ecommerce.entity.Product;
 import com.ecommerce.entity.User;
 import com.ecommerce.enums.OrderStatus;
 import com.ecommerce.exception.ResourceNotFoundException;
@@ -11,6 +14,7 @@ import com.ecommerce.repository.ProductRepository;
 import com.ecommerce.repository.UserRepository;
 import com.ecommerce.service.AdminService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,19 +29,22 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class AdminServiceImpl implements AdminService {
 
-    private final UserRepository userRepository;
-    private final OrderRepository orderRepository;
+    private final UserRepository    userRepository;
+    private final OrderRepository   orderRepository;
     private final ProductRepository productRepository;
+
+    // Ngưỡng cảnh báo tồn kho thấp
+    private static final int LOW_STOCK_THRESHOLD = 10;
 
     @Override
     public DashboardStatsResponse getDashboardStats() {
         LocalDateTime todayStart = LocalDateTime.now().with(LocalTime.MIN);
         LocalDateTime todayEnd   = LocalDateTime.now().with(LocalTime.MAX);
 
+        // ── Các chỉ số cơ bản (giữ nguyên) ──────────────────────────────
         BigDecimal totalRevenue = orderRepository.getTotalRevenue();
         BigDecimal todayRevenue = orderRepository.getRevenueByDateRange(todayStart, todayEnd);
 
-        // Revenue last 30 days grouped by day
         LocalDateTime since = LocalDateTime.now().minusDays(30);
         List<Object[]> rows = orderRepository.getRevenueGroupByDay(since);
         List<DashboardStatsResponse.RevenueByDay> revenueByDay = rows.stream()
@@ -45,8 +52,36 @@ public class AdminServiceImpl implements AdminService {
                 .date(row[0].toString())
                 .revenue(new BigDecimal(row[1].toString()))
                 .orders(Long.parseLong(row[2].toString()))
-                .build()
-            ).collect(Collectors.toList());
+                .build())
+            .collect(Collectors.toList());
+
+        // ── MỚI: Top 5 sản phẩm bán chạy ────────────────────────────────
+        List<Object[]> topRows = orderRepository
+            .getTopSellingProducts(PageRequest.of(0, 5))
+            .getContent();
+        List<TopProduct> topSellingProducts = topRows.stream()
+            .map(r -> TopProduct.builder()
+                .productId(((Number) r[0]).longValue())
+                .productName((String) r[1])
+                .imageUrl((String) r[2])
+                .totalSold(((Number) r[3]).longValue())
+                .totalRevenue(new BigDecimal(r[4].toString()))
+                .build())
+            .collect(Collectors.toList());
+
+        // ── MỚI: Top 8 sản phẩm tồn kho thấp ────────────────────────────
+        Pageable lowStockPage = PageRequest.of(0, 8);
+        List<Product> lowStockEntities =
+            productRepository.findLowStockProducts(LOW_STOCK_THRESHOLD, lowStockPage);
+        List<LowStockItem> lowStockProducts = lowStockEntities.stream()
+            .map(p -> LowStockItem.builder()
+                .productId(p.getId())
+                .productName(p.getName())
+                .imageUrl(p.getImageUrl())
+                .stockQty(p.getStockQty())
+                .sku(p.getSku())
+                .build())
+            .collect(Collectors.toList());
 
         return DashboardStatsResponse.builder()
             .totalUsers(userRepository.count())
@@ -57,6 +92,8 @@ public class AdminServiceImpl implements AdminService {
             .todayOrders(orderRepository.countOrdersByDateRange(todayStart, todayEnd))
             .todayRevenue(todayRevenue != null ? todayRevenue : BigDecimal.ZERO)
             .revenueByDay(revenueByDay)
+            .topSellingProducts(topSellingProducts)
+            .lowStockProducts(lowStockProducts)
             .build();
     }
 

@@ -26,15 +26,18 @@ import java.util.List;
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthFilter;
-    private final AuthenticationProvider authenticationProvider;
+    private final AuthenticationProvider  authenticationProvider;
 
     private static final String[] PUBLIC_ENDPOINTS = {
         "/auth/**",
         "/products/**",
         "/categories/**",
+        "/search/**",
         "/files/**",
         "/payment/vnpay-return",
         "/payment/vnpay-ipn",
+        // Tra cứu bảo hành công khai — không cần đăng nhập
+        "/warranty/lookup/**",
     };
 
     @Bean
@@ -44,9 +47,15 @@ public class SecurityConfig {
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers(PUBLIC_ENDPOINTS).permitAll()
-                .requestMatchers(HttpMethod.GET, "/products/**", "/categories/**").permitAll()
+                // Admin endpoints
                 .requestMatchers("/admin/**").hasRole("ADMIN")
+                .requestMatchers("/warranty/admin/**").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.POST, "/categories/**").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.PUT,  "/categories/**").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.DELETE, "/categories/**").hasRole("ADMIN")
+                // Public
+                .requestMatchers(PUBLIC_ENDPOINTS).permitAll()
+                // Mọi request khác cần đăng nhập
                 .anyRequest().authenticated()
             )
             .authenticationProvider(authenticationProvider)

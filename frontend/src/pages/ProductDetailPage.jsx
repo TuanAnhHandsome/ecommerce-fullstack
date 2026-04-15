@@ -11,23 +11,75 @@ import ProductImages from '../components/product/ProductImages'
 import ProductInfo from '../components/product/ProductInfo'
 import ProductReviews from '../components/product/ProductReviews'
 
+// ── Specs Table ───────────────────────────────────────────────────────────────
+function SpecsTable({ specs }) {
+  // specs: { "Cấu hình": [{key,value}], "Màn hình": [...] }
+  const hasSpecs = specs && Object.keys(specs).length > 0
+
+  if (!hasSpecs) {
+    return (
+      <div className="flex flex-col items-center justify-center py-10 text-gray-300 gap-2">
+        <i className="fa-solid fa-microchip text-3xl"></i>
+        <p className="text-sm text-gray-400">Chưa có thông số kỹ thuật</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      {Object.entries(specs).map(([group, rows]) => (
+        <div key={group}>
+          {/* Group header */}
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-xs font-bold text-indigo-600 uppercase tracking-widest">
+              {group}
+            </span>
+            <div className="flex-1 h-px bg-indigo-50"></div>
+          </div>
+
+          {/* Rows */}
+          <div className="rounded-xl overflow-hidden border border-gray-100">
+            {rows.map((row, i) => (
+              <div key={i}
+                className={`flex text-sm ${i % 2 === 0 ? 'bg-gray-50' : 'bg-white'}`}>
+                <span className="w-44 flex-shrink-0 px-4 py-2.5 text-gray-500 font-medium border-r border-gray-100">
+                  {row.key}
+                </span>
+                <span className="flex-1 px-4 py-2.5 text-gray-800">
+                  {row.value}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// ── Main ──────────────────────────────────────────────────────────────────────
 export default function ProductDetailPage() {
   const { slug } = useParams()
-  const navigate = useNavigate()
-  const [qty, setQty] = useState(1)
-  const [activeImg, setActiveImg] = useState(0)
-  const [lightboxOpen, setLightboxOpen] = useState(false)
+  const navigate  = useNavigate()
+  const [qty, setQty]                       = useState(1)
+  const [activeImg, setActiveImg]           = useState(0)
+  const [lightboxOpen, setLightboxOpen]     = useState(false)
   const [selectedValues, setSelectedValues] = useState({})
-  const [activeTab, setActiveTab] = useState('spec')
-  const [reviewPage, setReviewPage] = useState(0)
-  const [wishlist, setWishlist] = useState(false)
+  const [wishlist, setWishlist]             = useState(false)
+  const [reviewPage, setReviewPage]         = useState(0)
 
-  const addItem = useCartStore(s => s.addItem)
+  // Chọn tab mặc định: nếu có specs → 'spec', không thì 'desc'
+  const [activeTab, setActiveTab] = useState('spec')
+
+  const addItem       = useCartStore(s => s.addItem)
   const isAuthenticated = useAuthStore(s => s.isAuthenticated)
+  const isNumeric     = /^\d+$/.test(slug)
 
   const { data: product, isLoading } = useQuery({
     queryKey: ['product', slug],
-    queryFn: () => productAPI.getBySlug(slug).then(r => r.data),
+    queryFn: () => isNumeric
+      ? productAPI.getById(slug).then(r => r.data)
+      : productAPI.getBySlug(slug).then(r => r.data),
   })
 
   const { data: reviewData } = useQuery({
@@ -39,19 +91,21 @@ export default function ProductDetailPage() {
   })
 
   const {
-    allImages,
-    variantImgIndex,
+    allImages, variantImgIndex,
     currentPrice, originalPrice, salePrice,
     isOnSale, currentStock, discountPct,
   } = useProductVariant(product, selectedValues)
 
-  // Khi chọn biến thể → nhảy đến ảnh của biến thể đó
-  // Người dùng vẫn có thể lướt tự do sau đó
   useEffect(() => {
-    if (variantImgIndex >= 0) {
-      setActiveImg(variantImgIndex)
-    }
+    if (variantImgIndex >= 0) setActiveImg(variantImgIndex)
   }, [variantImgIndex])
+
+  // Khi product load xong: nếu không có specs → mặc định tab 'desc'
+  useEffect(() => {
+    if (!product) return
+    const hasSpecs = product.specs && Object.keys(product.specs).length > 0
+    setActiveTab(hasSpecs ? 'spec' : 'desc')
+  }, [product?.id])
 
   const handleSelectValue = (optName, value) => {
     setSelectedValues(prev => {
@@ -76,6 +130,7 @@ export default function ProductDetailPage() {
     navigate('/checkout')
   }
 
+  // ── Loading ────────────────────────────────────────────────────────────────
   if (isLoading) return (
     <div className="max-w-5xl mx-auto px-4 py-8 animate-pulse">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -96,6 +151,26 @@ export default function ProductDetailPage() {
     </div>
   )
 
+  const hasSpecs = product.specs && Object.keys(product.specs).length > 0
+  const totalSpecs = hasSpecs
+    ? Object.values(product.specs).reduce((acc, rows) => acc + rows.length, 0)
+    : 0
+
+  const TABS = [
+    {
+      key:   'spec',
+      label: 'Thông số kỹ thuật',
+      icon:  'fa-microchip',
+      badge: hasSpecs ? totalSpecs : null,
+    },
+    {
+      key:   'desc',
+      label: 'Mô tả chi tiết',
+      icon:  'fa-align-left',
+      badge: null,
+    },
+  ]
+
   return (
     <>
       {lightboxOpen && allImages.length > 0 && (
@@ -110,9 +185,11 @@ export default function ProductDetailPage() {
 
         {/* Breadcrumb */}
         <nav className="text-sm text-gray-400 mb-6 flex items-center gap-2 flex-wrap">
-          <a href="/" className="hover:text-red-500"><i className="fa-solid fa-house"></i></a>
+          <a href="/" className="hover:text-indigo-500 transition-colors">
+            <i className="fa-solid fa-house"></i>
+          </a>
           <i className="fa-solid fa-chevron-right text-xs"></i>
-          <a href="/products" className="hover:text-red-500">Sản phẩm</a>
+          <a href="/products" className="hover:text-indigo-500 transition-colors">Sản phẩm</a>
           <i className="fa-solid fa-chevron-right text-xs"></i>
           <span className="text-gray-600 line-clamp-1">{product.name}</span>
         </nav>
@@ -146,57 +223,58 @@ export default function ProductDetailPage() {
           />
         </div>
 
-        {/* Tabs */}
+        {/* Tabs: Thông số + Mô tả */}
         <div className="bg-white rounded-2xl border border-gray-100 mb-6 overflow-hidden">
+
+          {/* Tab buttons */}
           <div className="flex border-b border-gray-100">
-            {[
-              { key: 'spec', label: 'Thông số kỹ thuật', icon: 'fa-microchip' },
-              { key: 'desc', label: 'Mô tả chi tiết', icon: 'fa-align-left' },
-            ].map(tab => (
+            {TABS.map(tab => (
               <button
                 key={tab.key}
                 onClick={() => setActiveTab(tab.key)}
-                className={`flex items-center gap-2 px-6 py-4 text-sm font-medium border-b-2 transition-colors ${
+                className={`flex items-center gap-2 px-6 py-4 text-sm font-medium
+                  border-b-2 transition-colors ${
                   activeTab === tab.key
-                    ? 'border-red-500 text-red-600'
+                    ? 'border-indigo-500 text-indigo-600'
                     : 'border-transparent text-gray-500 hover:text-gray-700'
                 }`}
               >
                 <i className={`fa-solid ${tab.icon} text-xs`}></i>
                 {tab.label}
+                {tab.badge && (
+                  <span className={`text-xs px-1.5 py-0.5 rounded-full font-bold ${
+                    activeTab === tab.key
+                      ? 'bg-indigo-100 text-indigo-600'
+                      : 'bg-gray-100 text-gray-500'
+                  }`}>
+                    {tab.badge}
+                  </span>
+                )}
               </button>
             ))}
           </div>
+
+          {/* Tab content */}
           <div className="p-6">
+
+            {/* ── Thông số kỹ thuật ── */}
             {activeTab === 'spec' && (
-              product.variantOptions?.length > 0 ? (
-                <div>
-                  {product.variantOptions.map(opt => (
-                    <div key={opt.id} className="flex py-3 border-b border-gray-50 last:border-0 text-sm">
-                      <span className="text-gray-500 w-40 flex-shrink-0">{opt.name}</span>
-                      <span className="text-gray-800 font-medium">
-                        {opt.values.map(v => v.value).join(' / ')}
-                      </span>
-                    </div>
-                  ))}
-                  {product.sku && (
-                    <div className="flex py-3 text-sm">
-                      <span className="text-gray-500 w-40 flex-shrink-0">SKU</span>
-                      <span className="text-gray-800 font-medium">{product.sku}</span>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <p className="text-sm text-gray-400 text-center py-4">Chưa có thông số kỹ thuật</p>
-              )
+              <SpecsTable specs={product.specs} />
             )}
+
+            {/* ── Mô tả chi tiết ── */}
             {activeTab === 'desc' && (
               product.description ? (
-                <div className="prose prose-sm max-w-none text-gray-600 leading-relaxed whitespace-pre-line">
+                <div className="prose prose-sm max-w-none text-gray-600
+                  leading-relaxed whitespace-pre-line">
                   {product.description}
                 </div>
               ) : (
-                <p className="text-sm text-gray-400 text-center py-4">Chưa có mô tả</p>
+                <div className="flex flex-col items-center justify-center py-10
+                  text-gray-300 gap-2">
+                  <i className="fa-solid fa-align-left text-3xl"></i>
+                  <p className="text-sm text-gray-400">Chưa có mô tả chi tiết</p>
+                </div>
               )
             )}
           </div>

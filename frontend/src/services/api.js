@@ -8,7 +8,6 @@ const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 })
 
-// Attach JWT to every request
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('accessToken')
@@ -18,7 +17,6 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 )
 
-// Auto refresh token on 401
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
@@ -45,56 +43,50 @@ api.interceptors.response.use(
 
 export default api
 
-// ── Auth ─────────────────────────────────────────────────────────
 export const authAPI = {
-  login:    (data) => api.post('/auth/login', data),
-  register: (data) => api.post('/auth/register', data),
+  login:     (data)  => api.post('/auth/login', data),
+  register:  (data)  => api.post('/auth/register', data),
+  sendOtp:   (email) => api.post('/auth/send-otp', { email }),
+  verifyOtp: (email, otp) => api.post('/auth/verify-otp', { email, otp }),
 }
 
-// ── Products ─────────────────────────────────────────────────────
 export const productAPI = {
-  getAll:    (params) => api.get('/products', { params }),
-  getById:   (id)     => api.get(`/products/${id}`),
+  getAll:     (params)       => api.get('/products', { params }),
+  getById:    (id)           => api.get(`/products/${id}`),
   getReviews: (productId, params) => api.get(`/products/${productId}/reviews`, { params }),
-  getBySlug: (slug)   => api.get(`/products/slug/${slug}`),
-  create: (formData)  => api.post('/products', formData, {
-    headers: { 'Content-Type': 'multipart/form-data' }
-  }),
-  update: (id, formData) => api.put(`/products/${id}`, formData, {
-    headers: { 'Content-Type': 'multipart/form-data' }
-  }),
-  delete: (id) => api.delete(`/products/${id}`),
+  getBySlug:  (slug)         => api.get(`/products/slug/${slug}`),
+  create:     (formData)     => api.post('/products', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
+  update:     (id, formData) => api.put(`/products/${id}`, formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
+  delete:     (id)           => api.delete(`/products/${id}`),
 }
 
-// ── Categories ───────────────────────────────────────────────────
 export const categoryAPI = {
   getAll: () => api.get('/categories'),
+  create: (fd) => api.post('/categories', fd, { headers: { 'Content-Type': 'multipart/form-data' } }),
+  update: (id, fd) => api.put(`/categories/${id}`, fd, { headers: { 'Content-Type': 'multipart/form-data' } }),
+  delete: (id) => api.delete(`/categories/${id}`),
 }
 
-// ── Cart ─────────────────────────────────────────────────────────
 export const cartAPI = {
-  getCart:    ()                => api.get('/cart'),
-  addItem:    (data)            => api.post('/cart/items', data),
-  updateItem: (productId, qty)  => api.put(`/cart/items/${productId}`, null, { params: { quantity: qty } }),
-  removeItem: (productId)       => api.delete(`/cart/items/${productId}`),
-  clearCart:  ()                => api.delete('/cart'),
+  getCart:    ()               => api.get('/cart'),
+  addItem:    (data)           => api.post('/cart/items', data),
+  updateItem: (productId, qty) => api.put(`/cart/items/${productId}`, null, { params: { quantity: qty } }),
+  removeItem: (productId)      => api.delete(`/cart/items/${productId}`),
+  clearCart:  ()               => api.delete('/cart'),
 }
 
-// ── Orders ───────────────────────────────────────────────────────
 export const orderAPI = {
-  create:       (data)         => api.post('/orders', data),
-  getMyOrders:  (params)       => api.get('/orders', { params }),
-  getById:      (id)           => api.get(`/orders/${id}`),
-  getAllOrders:  (params)       => api.get('/orders/admin/all', { params }),
-  updateStatus: (id, status)   => api.put(`/orders/admin/${id}/status`, null, { params: { status } }),
+  create:       (data)       => api.post('/orders', data),
+  getMyOrders:  (params)     => api.get('/orders', { params }),
+  getById:      (id)         => api.get(`/orders/${id}`),
+  getAllOrders:  (params)     => api.get('/orders/admin/all', { params }),
+  updateStatus: (id, status) => api.put(`/orders/admin/${id}/status`, null, { params: { status } }),
 }
 
-// ── Payment ──────────────────────────────────────────────────────
 export const paymentAPI = {
   createVNPay: (orderId) => api.post('/payment/create-payment', { orderId }),
 }
 
-// ── Admin ────────────────────────────────────────────────────────
 export const adminAPI = {
   getDashboard: ()       => api.get('/admin/dashboard'),
   getUsers:     (params) => api.get('/admin/users', { params }),
@@ -108,14 +100,38 @@ export const userAPI = {
 }
 
 export const variantAPI = {
-  getByProduct: (productId) =>
-    api.get(`/products/${productId}`),
+  getByProduct: (productId)     => api.get(`/products/${productId}`),
+  save:         (productId, fd) => api.post(`/products/${productId}/variants`, fd, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  }),
+  deleteAll:    (productId)     => api.delete(`/products/${productId}/variants`),
+}
 
-  save: (productId, formData) =>
-    api.post(`/products/${productId}/variants`, formData, {  // ← phải là "api" không phải "axios"
-      headers: { 'Content-Type': 'multipart/form-data' }
-    }),
+export const searchAPI = {
+  getSuggestions: ()             => api.get('/search/suggestions'),
+  search:         (q, size = 8)  => api.get('/search', { params: { q, size } }),
+}
 
-  deleteAll: (productId) =>
-    api.delete(`/products/${productId}/variants`),
+export const warrantyAPI = {
+  create:      (data)     => api.post('/warranty', data),
+  getMyList:   (params)   => api.get('/warranty/my', { params }),
+  lookup:      (code)     => api.get(`/warranty/lookup/${code}`),
+  adminList:   (params)   => api.get('/warranty/admin', { params }),
+  adminUpdate: (id, data) => api.put(`/warranty/admin/${id}`, data),
+}
+
+// ── Coupons ──────────────────────────────────────────────────────
+export const couponAPI = {
+  apply:       (code, orderTotal) => api.get('/coupons/apply', { params: { code, orderTotal } }),
+  adminList:   (params)    => api.get('/coupons/admin', { params }),
+  adminCreate: (data)      => api.post('/coupons/admin', data),
+  adminUpdate: (id, data)  => api.put(`/coupons/admin/${id}`, data),
+  adminDelete: (id)        => api.delete(`/coupons/admin/${id}`),
+}
+
+// ── Inventory ────────────────────────────────────────────────────
+export const inventoryAPI = {
+  listAll:        (params)           => api.get('/inventory', { params }),
+  listByProduct:  (productId, params) => api.get(`/inventory/product/${productId}`, { params }),
+  addTransaction: (data)             => api.post('/inventory', data),
 }

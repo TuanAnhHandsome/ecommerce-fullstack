@@ -101,7 +101,17 @@
       <artifactId>commons-io</artifactId>
       <version>2.15.1</version>
     </dependency>
+    <!-- ===== EMAIL (SEND MAIL) ===== -->
+<dependency>
+  <groupId>org.springframework.boot</groupId>
+  <artifactId>spring-boot-starter-mail</artifactId>
+</dependency>
 
+<!-- ===== THYMELEAF (EMAIL TEMPLATE HTML) ===== -->
+<dependency>
+  <groupId>org.springframework.boot</groupId>
+  <artifactId>spring-boot-starter-thymeleaf</artifactId>
+</dependency>
     <!-- ===== DEV TOOLS ===== -->
     <dependency>
       <groupId>org.springframework.boot</groupId>

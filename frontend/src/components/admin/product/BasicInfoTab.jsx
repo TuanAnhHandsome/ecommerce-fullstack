@@ -1,3 +1,5 @@
+import CategorySelector from './CategorySelector'
+
 export default function BasicInfoTab({ form, setForm, categories }) {
   return (
     <div className="space-y-4">
@@ -9,11 +11,11 @@ export default function BasicInfoTab({ form, setForm, categories }) {
 
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">Danh mục *</label>
-        <select required className="input" value={form.categoryId}
-          onChange={e => setForm(f => ({ ...f, categoryId: e.target.value }))}>
-          <option value="">-- Chọn danh mục --</option>
-          {categories?.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </select>
+        <CategorySelector
+          categories={categories}
+          value={form.categoryId}
+          onChange={(id) => setForm(f => ({ ...f, categoryId: id }))}
+        />
       </div>
 
       <div className="grid grid-cols-2 gap-4">

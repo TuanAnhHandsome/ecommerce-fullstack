@@ -7,12 +7,18 @@ export default function Footer() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
           {/* Brand */}
           <div className="md:col-span-1">
-            <div className="flex items-center gap-2 mb-4">
-              <div className="w-8 h-8 bg-red-500 rounded-lg flex items-center justify-center">
-                <i className="fa-solid fa-bolt text-white text-sm"></i>
+            <Link to="/" className="flex items-center gap-2 mb-6 group">
+              <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center overflow-hidden border-2 border-gray-800 group-hover:border-red-500 transition-all">
+                <img
+                  src="/logo.jpg"
+                  alt="EShop Logo"
+                  className="w-full h-full object-cover"
+                />
               </div>
-              <span className="text-white font-bold text-lg">EShop</span>
-            </div>
+              <span className="text-white font-extrabold text-xl tracking-tight">
+                E<span className="text-red-500">Shop</span>
+              </span>
+            </Link>
             <p className="text-sm leading-relaxed">
               Mua sắm trực tuyến uy tín, giao hàng nhanh toàn quốc.
             </p>

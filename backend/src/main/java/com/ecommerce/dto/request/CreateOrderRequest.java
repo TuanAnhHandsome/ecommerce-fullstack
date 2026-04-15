@@ -20,4 +20,6 @@ public class CreateOrderRequest {
 
     @NotBlank(message = "Phương thức thanh toán không được để trống")
     private String paymentGateway; // "VNPAY" hoặc "COD"
+
+    private String couponCode; // tuỳ chọn, có thể null
 }
