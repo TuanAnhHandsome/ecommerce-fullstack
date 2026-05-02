@@ -64,28 +64,28 @@ public class PaymentController {
     @GetMapping("/vnpay-return")
     public ResponseEntity<Void> vnpayReturn(@RequestParam Map<String, String> params) {
 
-        boolean isValid = vnPayService.verifyReturnUrl(params);
+        // Tạo mutable copy vì verifyReturnUrl() sẽ remove keys
+        Map<String, String> mutableParams = new java.util.HashMap<>(params);
+
+        boolean isValid = vnPayService.verifyReturnUrl(mutableParams);
         String responseCode = params.get("vnp_ResponseCode");
         String txnRef = params.get("vnp_TxnRef");
 
-        // ← đổi thành URL frontend của bạn (localhost hoặc ngrok)
         String frontend = "http://localhost:5173";
 
+        String redirectUrl;
         if (!isValid) {
-            return ResponseEntity.status(302)
-                    .location(URI.create(frontend + "/payment/result?status=invalid&txnRef=" + txnRef))
-                    .build();
+            redirectUrl = frontend + "/payment/result?status=invalid&txnRef=" + txnRef;
+        } else if ("00".equals(responseCode)) {
+            redirectUrl = frontend + "/payment/result?status=success&txnRef=" + txnRef;
+        } else {
+            redirectUrl = frontend + "/payment/result?status=failed&txnRef=" + txnRef;
         }
 
-        if ("00".equals(responseCode)) {
-            return ResponseEntity.status(302)
-                    .location(URI.create(frontend + "/payment/result?status=success&txnRef=" + txnRef))
-                    .build();
-        } else {
-            return ResponseEntity.status(302)
-                    .location(URI.create(frontend + "/payment/result?status=failed&txnRef=" + txnRef))
-                    .build();
-        }
+        return ResponseEntity.status(302)
+                .header("Location", redirectUrl)
+                .header("ngrok-skip-browser-warning", "true") // ← bypass warning page
+                .build();
     }
 
     /**

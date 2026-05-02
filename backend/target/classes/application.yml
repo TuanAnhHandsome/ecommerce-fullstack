@@ -96,7 +96,7 @@ vnpay:
   tmn-code: FQ0W61US
   hash-secret: GOQDXEXNCJ8LZM08PHBJDOYH0VAGINFQ
   pay-url: https://sandbox.vnpayment.vn/paymentv2/vpcpay.html
-  return-url: https://cephalalgic-jan-hypernitrogenous.ngrok-free.dev/api/payment/vnpay-return
+  return-url: http://localhost:5173/payment/vnpay-return
   ipn-url: https://cephalalgic-jan-hypernitrogenous.ngrok-free.dev/api/payment/vnpay-ipn
   version: "2.1.0"
   command: pay

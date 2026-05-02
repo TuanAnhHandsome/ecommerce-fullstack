@@ -5,6 +5,7 @@ import { productAPI } from '../services/api'
 import { useCartStore } from '../store/cartStore'
 import { useAuthStore } from '../store/authStore'
 import { useProductVariant } from '../hooks/useProductVariant'
+import toast from 'react-hot-toast'
 
 import Lightbox from '../components/product/Lightbox'
 import ProductImages from '../components/product/ProductImages'
@@ -13,7 +14,6 @@ import ProductReviews from '../components/product/ProductReviews'
 
 // ── Specs Table ───────────────────────────────────────────────────────────────
 function SpecsTable({ specs }) {
-  // specs: { "Cấu hình": [{key,value}], "Màn hình": [...] }
   const hasSpecs = specs && Object.keys(specs).length > 0
 
   if (!hasSpecs) {
@@ -29,15 +29,12 @@ function SpecsTable({ specs }) {
     <div className="space-y-6">
       {Object.entries(specs).map(([group, rows]) => (
         <div key={group}>
-          {/* Group header */}
           <div className="flex items-center gap-2 mb-2">
             <span className="text-xs font-bold text-indigo-600 uppercase tracking-widest">
               {group}
             </span>
             <div className="flex-1 h-px bg-indigo-50"></div>
           </div>
-
-          {/* Rows */}
           <div className="rounded-xl overflow-hidden border border-gray-100">
             {rows.map((row, i) => (
               <div key={i}
@@ -60,20 +57,19 @@ function SpecsTable({ specs }) {
 // ── Main ──────────────────────────────────────────────────────────────────────
 export default function ProductDetailPage() {
   const { slug } = useParams()
-  const navigate  = useNavigate()
-  const [qty, setQty]                       = useState(1)
-  const [activeImg, setActiveImg]           = useState(0)
-  const [lightboxOpen, setLightboxOpen]     = useState(false)
+  const navigate = useNavigate()
+  const [qty, setQty] = useState(1)
+  const [activeImg, setActiveImg] = useState(0)
+  const [lightboxOpen, setLightboxOpen] = useState(false)
   const [selectedValues, setSelectedValues] = useState({})
-  const [wishlist, setWishlist]             = useState(false)
-  const [reviewPage, setReviewPage]         = useState(0)
-
-  // Chọn tab mặc định: nếu có specs → 'spec', không thì 'desc'
+  const [wishlist, setWishlist] = useState(false)
+  const [reviewPage, setReviewPage] = useState(0)
+  const [buyNowLoading, setBuyNowLoading] = useState(false)
   const [activeTab, setActiveTab] = useState('spec')
 
-  const addItem       = useCartStore(s => s.addItem)
+  const { addItem, fetchCart, items: cartItems } = useCartStore()
   const isAuthenticated = useAuthStore(s => s.isAuthenticated)
-  const isNumeric     = /^\d+$/.test(slug)
+  const isNumeric = /^\d+$/.test(slug)
 
   const { data: product, isLoading } = useQuery({
     queryKey: ['product', slug],
@@ -92,6 +88,7 @@ export default function ProductDetailPage() {
 
   const {
     allImages, variantImgIndex,
+    bestVariant,
     currentPrice, originalPrice, salePrice,
     isOnSale, currentStock, discountPct,
   } = useProductVariant(product, selectedValues)
@@ -100,12 +97,11 @@ export default function ProductDetailPage() {
     if (variantImgIndex >= 0) setActiveImg(variantImgIndex)
   }, [variantImgIndex])
 
-  // Khi product load xong: nếu không có specs → mặc định tab 'desc'
   useEffect(() => {
     if (!product) return
     const hasSpecs = product.specs && Object.keys(product.specs).length > 0
     setActiveTab(hasSpecs ? 'spec' : 'desc')
-  }, [product?.id])
+  }, [product])
 
   const handleSelectValue = (optName, value) => {
     setSelectedValues(prev => {
@@ -119,15 +115,72 @@ export default function ProductDetailPage() {
     setQty(1)
   }
 
-  const handleAddToCart = () => {
-    if (!isAuthenticated) { navigate('/login'); return }
-    addItem(product.id, qty)
+  // Validate variant selection nếu product có variants
+  const validateVariantSelection = () => {
+    if (!product?.variantOptions?.length) return true // không có variant → OK
+
+    const unselected = product.variantOptions.filter(
+      opt => !selectedValues[opt.name]
+    )
+    if (unselected.length > 0) {
+      toast.error(`Vui lòng chọn: ${unselected.map(o => o.name).join(', ')}`)
+      return false
+    }
+    return true
   }
 
-  const handleBuyNow = () => {
+  const handleAddToCart = () => {
     if (!isAuthenticated) { navigate('/login'); return }
-    addItem(product.id, qty)
-    navigate('/checkout')
+    if (!validateVariantSelection()) return
+    // addItem(productId, quantity, variantId)
+    addItem(product.id, qty, bestVariant?.id ?? null)
+  }
+
+  /**
+   * Buy Now flow:
+   * 1. Thêm sản phẩm vào cart (addItem gọi API → fetchCart cập nhật store)
+   * 2. Lấy cartItemId vừa được tạo từ store
+   * 3. Navigate sang /checkout với cartItemIds
+   *
+   * Lý do không navigate với items trực tiếp:
+   * - Backend cần cartItemId để verify ownership và lấy đúng giá/stock
+   * - Tránh client tự ý truyền giá lên
+   */
+  const handleBuyNow = async () => {
+    if (!isAuthenticated) { navigate('/login'); return }
+    if (!validateVariantSelection()) return
+
+    setBuyNowLoading(true)
+    try {
+      // 1. Thêm vào cart (API call)
+      await addItem(product.id, qty, bestVariant?.id ?? null)
+
+      // 2. Fetch cart mới nhất để có cartItemId
+      await fetchCart()
+
+      // 3. Tìm cartItemId vừa thêm trong store
+      //    Match theo productId + variantId
+      const cartState = useCartStore.getState()
+      const newItem = cartState.items.find(item =>
+        item.productId === product.id &&
+        (bestVariant ? item.variantId === bestVariant.id : item.variantId == null)
+      )
+
+      if (!newItem) {
+        toast.error('Không thể xác định sản phẩm trong giỏ hàng')
+        return
+      }
+
+      // 4. Navigate với cartItemIds
+      navigate('/checkout', {
+        state: { cartItemIds: [newItem.id] }
+      })
+    } catch (err) {
+      // addItem đã toast error rồi nên không cần toast thêm
+      console.error('Buy now error:', err)
+    } finally {
+      setBuyNowLoading(false)
+    }
   }
 
   // ── Loading ────────────────────────────────────────────────────────────────
@@ -158,15 +211,15 @@ export default function ProductDetailPage() {
 
   const TABS = [
     {
-      key:   'spec',
+      key: 'spec',
       label: 'Thông số kỹ thuật',
-      icon:  'fa-microchip',
+      icon: 'fa-microchip',
       badge: hasSpecs ? totalSpecs : null,
     },
     {
-      key:   'desc',
+      key: 'desc',
       label: 'Mô tả chi tiết',
-      icon:  'fa-align-left',
+      icon: 'fa-align-left',
       badge: null,
     },
   ]
@@ -220,24 +273,22 @@ export default function ProductDetailPage() {
             setQty={setQty}
             handleAddToCart={handleAddToCart}
             onBuyNow={handleBuyNow}
+            buyNowLoading={buyNowLoading}
           />
         </div>
 
-        {/* Tabs: Thông số + Mô tả */}
+        {/* Tabs */}
         <div className="bg-white rounded-2xl border border-gray-100 mb-6 overflow-hidden">
-
-          {/* Tab buttons */}
           <div className="flex border-b border-gray-100">
             {TABS.map(tab => (
               <button
                 key={tab.key}
                 onClick={() => setActiveTab(tab.key)}
                 className={`flex items-center gap-2 px-6 py-4 text-sm font-medium
-                  border-b-2 transition-colors ${
-                  activeTab === tab.key
+                  border-b-2 transition-colors ${activeTab === tab.key
                     ? 'border-indigo-500 text-indigo-600'
                     : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
+                  }`}
               >
                 <i className={`fa-solid ${tab.icon} text-xs`}></i>
                 {tab.label}
@@ -254,24 +305,15 @@ export default function ProductDetailPage() {
             ))}
           </div>
 
-          {/* Tab content */}
           <div className="p-6">
-
-            {/* ── Thông số kỹ thuật ── */}
-            {activeTab === 'spec' && (
-              <SpecsTable specs={product.specs} />
-            )}
-
-            {/* ── Mô tả chi tiết ── */}
+            {activeTab === 'spec' && <SpecsTable specs={product.specs} />}
             {activeTab === 'desc' && (
               product.description ? (
-                <div className="prose prose-sm max-w-none text-gray-600
-                  leading-relaxed whitespace-pre-line">
+                <div className="prose prose-sm max-w-none text-gray-600 leading-relaxed whitespace-pre-line">
                   {product.description}
                 </div>
               ) : (
-                <div className="flex flex-col items-center justify-center py-10
-                  text-gray-300 gap-2">
+                <div className="flex flex-col items-center justify-center py-10 text-gray-300 gap-2">
                   <i className="fa-solid fa-align-left text-3xl"></i>
                   <p className="text-sm text-gray-400">Chưa có mô tả chi tiết</p>
                 </div>

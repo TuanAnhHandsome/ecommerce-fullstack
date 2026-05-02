@@ -12,17 +12,27 @@ export const useCartStore = create((set, get) => ({
     set({ loading: true })
     try {
       const { data } = await cartAPI.getCart()
-      set({ items: data.items, totalItems: data.totalItems, totalAmount: data.totalAmount })
+      set({
+        items: data.items,
+        totalItems: data.totalItems,
+        totalAmount: data.totalAmount,
+      })
     } catch {
-      // chưa đăng nhập thì bỏ qua
+      // Chưa đăng nhập → bỏ qua, không báo lỗi
     } finally {
       set({ loading: false })
     }
   },
 
-  addItem: async (productId, quantity = 1) => {
+  /**
+   * Thêm sản phẩm vào giỏ.
+   * @param {number} productId
+   * @param {number} quantity
+   * @param {number|null} variantId - null nếu sản phẩm không có variant
+   */
+  addItem: async (productId, quantity = 1, variantId = null) => {
     try {
-      await cartAPI.addItem({ productId, quantity })
+      await cartAPI.addItem({ productId, variantId, quantity })
       await get().fetchCart()
       toast.success('Đã thêm vào giỏ hàng!')
     } catch (err) {
@@ -30,22 +40,31 @@ export const useCartStore = create((set, get) => ({
     }
   },
 
-  updateItem: async (productId, quantity) => {
+  /**
+   * Cập nhật số lượng cart item.
+   * @param {number} cartItemId - item.id từ CartResponse (KHÔNG phải productId)
+   * @param {number} quantity   - Số lượng mới (>= 1)
+   */
+  updateItem: async (cartItemId, quantity) => {
     try {
-      await cartAPI.updateItem(productId, quantity)
+      await cartAPI.updateItem(cartItemId, quantity)
       await get().fetchCart()
     } catch (err) {
       toast.error(err.response?.data?.message || 'Lỗi cập nhật giỏ hàng')
     }
   },
 
-  removeItem: async (productId) => {
+  /**
+   * Xóa cart item khỏi giỏ.
+   * @param {number} cartItemId - item.id từ CartResponse (KHÔNG phải productId)
+   */
+  removeItem: async (cartItemId) => {
     try {
-      await cartAPI.removeItem(productId)
+      await cartAPI.removeItem(cartItemId)
       await get().fetchCart()
-      toast.success('Đã xoá khỏi giỏ hàng')
+      toast.success('Đã xóa khỏi giỏ hàng')
     } catch {
-      toast.error('Không thể xoá sản phẩm')
+      toast.error('Không thể xóa sản phẩm')
     }
   },
 

@@ -3,13 +3,17 @@ package com.ecommerce.dto.response;
 import lombok.*;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Map;
 
-@Data @Builder @NoArgsConstructor @AllArgsConstructor
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class ReviewResponse {
     private Long id;
     private Long userId;
     private String userName;
+    private Long productId;   // để FE biết item nào đã reviewed
+    private Long orderId;     // để FE check per order
     private Byte rating;
     private String title;
     private String comment;

@@ -15,10 +15,15 @@ import java.util.List;
 import java.util.Optional;
 
 public interface OrderRepository extends JpaRepository<Order, Long> {
+
     Page<Order> findByUser(User user, Pageable pageable);
+
     Optional<Order> findByOrderCode(String orderCode);
+
     Optional<Order> findByIdAndUser(Long id, User user);
+
     Page<Order> findByStatus(OrderStatus status, Pageable pageable);
+
     Long countByStatus(OrderStatus status);
 
     @Query("SELECT o FROM Order o LEFT JOIN FETCH o.user ORDER BY o.createdAt DESC")
@@ -42,20 +47,39 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
            "GROUP BY DATE(created_at) ORDER BY date ASC", nativeQuery = true)
     List<Object[]> getRevenueGroupByDay(LocalDateTime since);
 
+    /**
+     * Kiểm tra user đã mua product trong đơn hàng có trạng thái DELIVERED chưa.
+     * Thường dùng để kiểm tra quyền viết Review.
+     */
     @Query("""
         SELECT o FROM Order o
-        JOIN o.orderItems oi
+        JOIN o.orderItems i
         WHERE o.user.id = :userId
-          AND oi.product.id = :productId
-          AND o.status = 'DELIVERED'
+          AND i.product.id = :productId
+          AND o.status = com.ecommerce.enums.OrderStatus.DELIVERED
         ORDER BY o.createdAt DESC
         LIMIT 1
     """)
     Optional<Order> findDeliveredOrderContainingProduct(
-        @Param("userId") Long userId,
-        @Param("productId") Long productId);
+            @Param("userId") Long userId,
+            @Param("productId") Long productId);
 
-    // ── MỚI: Top sản phẩm bán chạy — dùng Pageable để tránh lỗi LIMIT với named param ──
+    /**
+     * Lấy đơn hàng kèm theo danh sách items và product để validate dữ liệu review.
+     */
+    @Query("""
+        SELECT o FROM Order o
+        JOIN FETCH o.orderItems i
+        JOIN FETCH i.product
+        WHERE o.id = :orderId
+          AND o.user.id = :userId
+          AND o.status = com.ecommerce.enums.OrderStatus.DELIVERED
+    """)
+    Optional<Order> findDeliveredOrderByIdAndUser(
+            @Param("orderId") Long orderId,
+            @Param("userId") Long userId);
+
+    // Top sản phẩm bán chạy
     @Query(value = """
         SELECT oi.product_id,
                p.name,
@@ -72,4 +96,15 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
         countQuery = "SELECT COUNT(DISTINCT oi.product_id) FROM order_items oi",
         nativeQuery = true)
     Page<Object[]> getTopSellingProducts(Pageable pageable);
+
+    // ✅ FIX: JOIN FETCH user + orderItems để tránh LazyInitializationException
+    // trong @Async email thread sau khi transaction IPN đã đóng
+    @Query("""
+        SELECT o FROM Order o
+        JOIN FETCH o.user
+        JOIN FETCH o.orderItems oi
+        JOIN FETCH oi.product
+        WHERE o.orderCode = :orderCode
+    """)
+    Optional<Order> findByOrderCodeWithDetails(@Param("orderCode") String orderCode);
 }

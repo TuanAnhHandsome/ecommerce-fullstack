@@ -10,7 +10,10 @@ import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "cart_items",
-    uniqueConstraints = @UniqueConstraint(columnNames = {"user_id", "product_id"}))
+    uniqueConstraints = @UniqueConstraint(
+        name = "uq_cart_user_product_variant",
+        columnNames = {"user_id", "product_id", "variant_id"}
+    ))
 @EntityListeners(AuditingEntityListener.class)
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
 public class CartItem {
@@ -23,12 +26,19 @@ public class CartItem {
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
-    // EAGER để tránh LazyInitializationException khi build CartResponse
-    @ManyToOne(fetch = FetchType.EAGER)
+    // LAZY — được load bằng JOIN FETCH trong query
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "product_id", nullable = false)
     private Product product;
 
+    // LAZY — được load bằng JOIN FETCH trong query
+    // null = sản phẩm không có variant
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "variant_id")
+    private ProductVariant variant;
+
     @Column(nullable = false)
+    @Builder.Default
     private Integer quantity = 1;
 
     @CreatedDate
@@ -38,4 +48,16 @@ public class CartItem {
     @LastModifiedDate
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
+
+    @Transient
+    public java.math.BigDecimal getEffectivePrice() {
+        if (variant != null) return variant.getEffectivePrice();
+        return product.getEffectivePrice();
+    }
+
+    @Transient
+    public int getAvailableStock() {
+        if (variant != null) return variant.getStockQty();
+        return product.getStockQty();
+    }
 }

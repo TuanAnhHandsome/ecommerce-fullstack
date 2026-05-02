@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useAuthStore } from '../../store/authStore'
-import { adminAPI, warrantyAPI } from '../../services/api'
+import { adminAPI, warrantyAPI, returnAPI } from '../../services/api'   // ← thêm returnAPI
 
 const NAV_GROUPS = [
   {
@@ -22,9 +22,10 @@ const NAV_GROUPS = [
   {
     label: 'Vận hành',
     items: [
-      { to: '/admin/inventory',  label: 'Kho hàng',   icon: 'fa-warehouse', badge: 'inventory' },
-      { to: '/admin/promotions', label: 'Khuyến mãi', icon: 'fa-ticket',    badge: 'promotions' },
-      { to: '/admin/warranty',   label: 'Bảo hành',   icon: 'fa-shield-halved', badge: 'warranty' },
+      { to: '/admin/inventory',  label: 'Kho hàng',    icon: 'fa-warehouse',     badge: 'inventory'  },
+      { to: '/admin/promotions', label: 'Khuyến mãi',  icon: 'fa-ticket',        badge: 'promotions' },
+      { to: '/admin/returns',    label: 'Hoàn hàng',   icon: 'fa-rotate-left',   badge: 'returns'    }, // ← MỚI
+      { to: '/admin/warranty',   label: 'Bảo hành',    icon: 'fa-shield-halved', badge: 'warranty'   },
     ]
   },
   {
@@ -54,9 +55,18 @@ export default function AdminLayout() {
     refetchInterval: 60000,
   })
 
+  // ← MỚI: badge hoàn hàng chờ duyệt
+  const { data: pendingReturns = 0 } = useQuery({
+    queryKey: ['admin-returns-badge'],
+    queryFn:  () => returnAPI.adminList({ page: 0, size: 1, status: 'PENDING' })
+      .then(r => r.data?.totalElements ?? 0),
+    refetchInterval: 60000,
+  })
+
   const getBadge = (key) => {
     if (key === 'orders')   return stats?.pendingOrders ?? 0
     if (key === 'warranty') return pendingWarranty
+    if (key === 'returns')  return pendingReturns          // ← MỚI
     return 0
   }
 
@@ -188,7 +198,7 @@ export default function AdminLayout() {
           <div className="flex items-center gap-2">
             <button className="relative p-2.5 text-gray-400 hover:bg-gray-50 rounded-xl transition-colors">
               <i className="fa-solid fa-bell text-sm"></i>
-              {(getBadge('orders') > 0 || getBadge('warranty') > 0) && (
+              {(getBadge('orders') > 0 || getBadge('warranty') > 0 || getBadge('returns') > 0) && (
                 <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-rose-500 rounded-full border-2 border-white"></span>
               )}
             </button>

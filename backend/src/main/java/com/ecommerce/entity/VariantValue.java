@@ -12,7 +12,9 @@ public class VariantValue {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne(fetch = FetchType.LAZY)
+    // EAGER vì VariantValue luôn cần tên option (dùng để build variantValuesMap)
+    // Không có N+1 risk vì VariantValue chỉ được load cùng variant
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "variant_option_id", nullable = false)
     private VariantOption variantOption;
 
@@ -20,5 +22,6 @@ public class VariantValue {
     private String value;
 
     @Column(name = "sort_order")
+    @Builder.Default
     private Integer sortOrder = 0;
 }

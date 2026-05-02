@@ -6,6 +6,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Data
 @Builder
@@ -26,11 +27,12 @@ public class WarrantyResponse {
     private Long   orderId;
     private String orderCode;
 
-    // Sản phẩm
-    private String productName;
-    private String serialNumber;
+    // Sản phẩm — [MỚI] thêm danh sách items pre-filled từ order
+    private String       productName;
+    private String       serialNumber;
+    private List<String> orderItemNames; // snapshot tên các sản phẩm trong đơn
 
-    // Loại & trạng thái (enum name + label tiếng Việt)
+    // Loại & trạng thái
     private String type;
     private String typeLabel;
     private String status;

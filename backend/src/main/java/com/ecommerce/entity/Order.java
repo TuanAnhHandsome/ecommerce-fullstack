@@ -81,4 +81,13 @@ public class Order {
 
     @Column(name = "coupon_code", length = 50)
     private String couponCode;
+
+    @Column(name = "cancel_reason", columnDefinition = "TEXT")
+    private String cancelReason;
+
+    @Column(name = "cancelled_at")
+    private LocalDateTime cancelledAt;
+
+    @Column(name = "cancelled_by", length = 100)
+    private String cancelledBy;
 }

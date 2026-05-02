@@ -13,31 +13,32 @@ const EMPTY_FORM = {
 
 export default function ProductsAdminPage() {
   const queryClient = useQueryClient()
-  const [page, setPage]       = useState(0)
+  const [page, setPage] = useState(0)
   const [keyword, setKeyword] = useState('')
-  const [showForm, setShowForm]   = useState(false)
-  const [editing, setEditing]     = useState(null)
+  const [showForm, setShowForm] = useState(false)
+  const [editing, setEditing] = useState(null)
   const [activeTab, setActiveTab] = useState('basic')
-  const [loading, setLoading]     = useState(false)
+  const [loading, setLoading] = useState(false)
 
-  const [form, setForm]                       = useState(EMPTY_FORM)
-  const [existingImages, setExistingImages]   = useState([])
-  const [newImages, setNewImages]             = useState([])
+  const [form, setForm] = useState(EMPTY_FORM)
+  const [existingImages, setExistingImages] = useState([])
+  const [newImages, setNewImages] = useState([])
   const [deletedImageIds, setDeletedImageIds] = useState([])
-  const [specs, setSpecs]                     = useState([])   // ← MỚI: flat list
+  const [specs, setSpecs] = useState([])
 
   const { data } = useQuery({
     queryKey: ['admin-products', page, keyword],
     queryFn: () => productAPI.getAll({
       page, size: 15,
       keyword: keyword || undefined,
-      sortBy: 'createdAt', sortDir: 'desc'
+      sortBy: 'createdAt', sortDir: 'desc',
+      includeInactive: true,   // ← lấy cả sản phẩm đang ẩn
     }).then(r => r.data),
   })
 
   const { data: categories } = useQuery({
     queryKey: ['categories'],
-    queryFn:  () => categoryAPI.getAll().then(r => r.data),
+    queryFn: () => categoryAPI.getAll().then(r => r.data),
   })
 
   const resetForm = () => {
@@ -64,7 +65,6 @@ export default function ProductsAdminPage() {
     setNewImages([])
     setDeletedImageIds([])
 
-    // Rebuild flat specs từ map {group: [{key,value}]}
     const flatSpecs = []
     if (p.specs) {
       Object.entries(p.specs).forEach(([group, rows]) => {
@@ -86,12 +86,12 @@ export default function ProductsAdminPage() {
       const fd = new FormData()
       fd.append('product', new Blob([JSON.stringify({
         ...form,
-        price:    Number(form.price),
+        price: Number(form.price),
         salePrice: form.salePrice ? Number(form.salePrice) : null,
-        stockQty:  Number(form.stockQty),
+        stockQty: Number(form.stockQty),
         categoryId: Number(form.categoryId),
         deletedImageIds: deletedImageIds.length ? deletedImageIds : undefined,
-        specs: specs.length ? specs : [],   // ← MỚI
+        specs: specs.length ? specs : [],
       })], { type: 'application/json' }))
 
       if (newImages[0]) fd.append('images', newImages[0].file)
@@ -112,13 +112,17 @@ export default function ProductsAdminPage() {
     }
   }
 
-  const handleDelete = async (id, name) => {
-    if (!confirm(`Ẩn sản phẩm "${name}"?`)) return
+  // Toggle ẩn / hiện sản phẩm
+  const handleToggleActive = async (id, name, currentActive) => {
+    const action = currentActive ? 'ẩn' : 'hiện lại'
+    if (!confirm(`Bạn muốn ${action} sản phẩm "${name}"?`)) return
     try {
-      await productAPI.delete(id)
-      toast.success('Đã ẩn sản phẩm')
+      await productAPI.toggleActive(id, !currentActive)  // ← gọi đúng method
+      toast.success(`Đã ${action} sản phẩm`)
       queryClient.invalidateQueries(['admin-products'])
-    } catch { toast.error('Không thể ẩn sản phẩm') }
+    } catch {
+      toast.error('Không thể cập nhật trạng thái')
+    }
   }
 
   return (
@@ -159,16 +163,16 @@ export default function ProductsAdminPage() {
             </thead>
             <tbody className="divide-y divide-gray-50">
               {data?.content?.map(p => (
-                <tr key={p.id} className="hover:bg-gray-50 transition-colors">
+                <tr key={p.id} className={`hover:bg-gray-50 transition-colors ${!p.active ? 'opacity-60' : ''}`}>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-3">
                       <div className="w-12 h-12 bg-gray-100 rounded-xl overflow-hidden flex-shrink-0">
                         {p.imageUrl
                           ? <img src={p.imageUrl} className="w-full h-full object-cover"
-                              crossOrigin="anonymous" referrerPolicy="no-referrer" />
+                            crossOrigin="anonymous" referrerPolicy="no-referrer" />
                           : <div className="w-full h-full flex items-center justify-center">
-                              <i className="fa-solid fa-image text-gray-300"></i>
-                            </div>
+                            <i className="fa-solid fa-image text-gray-300"></i>
+                          </div>
                         }
                       </div>
                       <div>
@@ -195,20 +199,18 @@ export default function ProductsAdminPage() {
                     {p.salePrice && <p className="text-xs text-gray-400 line-through">{formatPrice(p.price)}</p>}
                   </td>
                   <td className="px-4 py-3">
-                    <span className={`text-sm font-semibold ${
-                      p.stockQty === 0   ? 'text-rose-500'
+                    <span className={`text-sm font-semibold ${p.stockQty === 0 ? 'text-rose-500'
                       : p.stockQty < 10 ? 'text-amber-600'
-                      :                   'text-emerald-600'
-                    }`}>
+                        : 'text-emerald-600'
+                      }`}>
                       {p.stockQty === 0
                         ? <><i className="fa-solid fa-circle-xmark mr-1"></i>Hết</>
                         : <><i className="fa-solid fa-circle-check mr-1"></i>{p.stockQty}</>}
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${
-                      p.active ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'
-                    }`}>
+                    <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${p.active ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'
+                      }`}>
                       {p.active
                         ? <><i className="fa-solid fa-eye mr-1"></i>Hiển thị</>
                         : <><i className="fa-solid fa-eye-slash mr-1"></i>Ẩn</>}
@@ -220,9 +222,16 @@ export default function ProductsAdminPage() {
                         className="p-1.5 text-blue-500 hover:bg-blue-50 rounded-lg transition-colors" title="Sửa">
                         <i className="fa-solid fa-pen-to-square"></i>
                       </button>
-                      <button onClick={() => handleDelete(p.id, p.name)}
-                        className="p-1.5 text-rose-400 hover:bg-rose-50 rounded-lg transition-colors" title="Ẩn">
-                        <i className="fa-solid fa-eye-slash"></i>
+                      {/* Toggle ẩn / hiện */}
+                      <button
+                        onClick={() => handleToggleActive(p.id, p.name, p.active)}
+                        className={`p-1.5 rounded-lg transition-colors ${p.active
+                          ? 'text-rose-400 hover:bg-rose-50'
+                          : 'text-emerald-500 hover:bg-emerald-50'
+                          }`}
+                        title={p.active ? 'Ẩn sản phẩm' : 'Hiện lại'}
+                      >
+                        <i className={`fa-solid ${p.active ? 'fa-eye-slash' : 'fa-eye'}`}></i>
                       </button>
                     </div>
                   </td>
@@ -236,9 +245,8 @@ export default function ProductsAdminPage() {
           <div className="flex justify-center gap-2 p-4 border-t border-gray-50">
             {[...Array(data.totalPages)].map((_, i) => (
               <button key={i} onClick={() => setPage(i)}
-                className={`w-8 h-8 rounded-lg text-sm font-medium ${
-                  page === i ? 'bg-indigo-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}>
+                className={`w-8 h-8 rounded-lg text-sm font-medium ${page === i ? 'bg-indigo-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  }`}>
                 {i + 1}
               </button>
             ))}

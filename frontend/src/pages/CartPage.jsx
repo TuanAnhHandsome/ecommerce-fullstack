@@ -4,85 +4,93 @@ import { useCartStore } from '../store/cartStore'
 
 export default function CartPage() {
   const navigate = useNavigate()
-  const { items, totalAmount, totalItems, fetchCart, updateItem, removeItem, loading } = useCartStore()
+  const { items, totalItems, fetchCart, updateItem, removeItem, loading } = useCartStore()
 
-  // ─── Checkbox state ───────────────────────────────────────────────────────
+  // ─── Checkbox state — dùng cartItemId (item.id), KHÔNG phải productId ────
   const [selected, setSelected] = useState(new Set())
 
-  // Khi giỏ hàng load xong → chọn tất cả mặc định
   useEffect(() => {
     fetchCart()
   }, [])
 
+  // Khi giỏ hàng load xong → chọn tất cả mặc định
   useEffect(() => {
     if (items.length > 0) {
-      setSelected(new Set(items.map(i => i.productId)))
+      setSelected(new Set(items.map(i => i.id))) // ← item.id = cartItemId
     }
   }, [items.length])
 
-  const allSelected = items.length > 0 && selected.size === items.length
+  const allSelected  = items.length > 0 && selected.size === items.length
   const someSelected = selected.size > 0 && !allSelected
 
   const toggleAll = () => {
-    if (allSelected) {
-      setSelected(new Set())
-    } else {
-      setSelected(new Set(items.map(i => i.productId)))
-    }
+    if (allSelected) setSelected(new Set())
+    else setSelected(new Set(items.map(i => i.id)))
   }
 
-  const toggleOne = (id) => {
+  const toggleOne = (cartItemId) => {
     setSelected(prev => {
       const next = new Set(prev)
-      next.has(id) ? next.delete(id) : next.add(id)
+      next.has(cartItemId) ? next.delete(cartItemId) : next.add(cartItemId)
       return next
     })
   }
 
-  // ─── Số lượng & xóa ──────────────────────────────────────────────────────
-  const handleUpdateQuantity = useCallback((id, newQty) => {
+  // ─── Số lượng & xóa — truyền cartItemId ─────────────────────────────────
+  const handleUpdateQuantity = useCallback((cartItemId, newQty) => {
     if (newQty < 1) {
       if (window.confirm('Bạn có muốn xóa sản phẩm này khỏi giỏ hàng không?')) {
-        removeItem(id)
+        removeItem(cartItemId)
         setSelected(prev => {
           const next = new Set(prev)
-          next.delete(id)
+          next.delete(cartItemId)
           return next
         })
       }
     } else {
-      updateItem(id, newQty)
+      updateItem(cartItemId, newQty)
     }
   }, [removeItem, updateItem])
 
-  const handleRemove = (id) => {
+  const handleRemove = useCallback((cartItemId) => {
     if (window.confirm('Bạn có muốn xóa sản phẩm này khỏi giỏ hàng không?')) {
-      removeItem(id)
+      removeItem(cartItemId)
       setSelected(prev => {
         const next = new Set(prev)
-        next.delete(id)
+        next.delete(cartItemId)
         return next
       })
     }
-  }
+  }, [removeItem])
 
   const handleRemoveSelected = () => {
     if (selected.size === 0) return
     if (window.confirm(`Xóa ${selected.size} sản phẩm đã chọn?`)) {
-      selected.forEach(id => removeItem(id))
+      selected.forEach(cartItemId => removeItem(cartItemId))
       setSelected(new Set())
     }
   }
 
-  // ─── Tính tiền chỉ cho sản phẩm được chọn ────────────────────────────────
-  const selectedItems = items.filter(i => selected.has(i.productId))
-  const selectedTotal = selectedItems.reduce((s, i) => s + i.subtotal, 0)
-  const shippingFee = selectedTotal >= 500000 ? 0 : (selectedTotal > 0 ? 30000 : 0)
-  const finalAmount = selectedTotal + shippingFee
+  // ─── Tính tiền chỉ cho item được chọn ───────────────────────────────────
+  const selectedItems   = items.filter(i => selected.has(i.id))
+  const selectedTotal   = selectedItems.reduce((s, i) => s + Number(i.subtotal), 0)
+  const shippingFee     = selectedTotal >= 500_000 ? 0 : (selectedTotal > 0 ? 30_000 : 0)
+  const finalAmount     = selectedTotal + shippingFee
 
   const formatPrice = (p) => new Intl.NumberFormat('vi-VN').format(p) + 'đ'
 
-  // ─── Loading skeleton ─────────────────────────────────────────────────────
+  // ─── Checkout: truyền cartItemIds (không phải productIds) ───────────────
+  const handleCheckout = () => {
+    if (selected.size === 0) return
+    navigate('/checkout', {
+      state: {
+        // Truyền mảng cartItemId để backend biết chính xác item nào
+        cartItemIds: [...selected],
+      }
+    })
+  }
+
+  // ─── Loading skeleton ────────────────────────────────────────────────────
   if (loading) return (
     <div className="max-w-5xl mx-auto px-4 py-8 animate-pulse">
       <div className="h-8 bg-gray-200 rounded w-1/3 mb-6" />
@@ -98,7 +106,7 @@ export default function CartPage() {
     </div>
   )
 
-  // ─── Giỏ trống ────────────────────────────────────────────────────────────
+  // ─── Giỏ trống ───────────────────────────────────────────────────────────
   if (!loading && items.length === 0) return (
     <div className="max-w-2xl mx-auto px-4 py-20 text-center">
       <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -106,7 +114,8 @@ export default function CartPage() {
       </div>
       <h2 className="text-xl font-bold text-gray-700 mb-2">Giỏ hàng trống</h2>
       <p className="text-gray-400 mb-6">Hãy thêm sản phẩm vào giỏ hàng của bạn!</p>
-      <Link to="/products" className="btn-primary px-8 py-3 inline-flex items-center gap-2">
+      <Link to="/products"
+        className="btn-primary px-8 py-3 inline-flex items-center gap-2">
         <i className="fa-solid fa-bag-shopping"></i>Mua sắm ngay
       </Link>
     </div>
@@ -131,7 +140,7 @@ export default function CartPage() {
         {/* ── Danh sách sản phẩm ── */}
         <div className="lg:col-span-2 space-y-3">
 
-          {/* Select all row */}
+          {/* Select all */}
           <div className="card p-3 flex items-center gap-3">
             <input
               type="checkbox"
@@ -140,7 +149,8 @@ export default function CartPage() {
               onChange={toggleAll}
               className="w-4 h-4 accent-red-500 cursor-pointer"
             />
-            <label onClick={toggleAll} className="flex-1 text-sm text-gray-600 cursor-pointer select-none">
+            <label onClick={toggleAll}
+              className="flex-1 text-sm text-gray-600 cursor-pointer select-none">
               Chọn tất cả ({items.length} sản phẩm)
             </label>
             {selected.size > 0 && (
@@ -153,35 +163,35 @@ export default function CartPage() {
             )}
           </div>
 
-          {/* Items */}
+          {/* Items — key dùng item.id (cartItemId) */}
           {items.map(item => {
-            const isSelected = selected.has(item.productId)
-            const isLowStock = item.maxStock <= 5
-            const hasDiscount = item.originalPrice && item.originalPrice > item.unitPrice
+            const isSelected  = selected.has(item.id) // ← item.id
+            const isLowStock  = item.maxStock > 0 && item.maxStock <= 5
+            const hasDiscount = item.originalPrice && Number(item.originalPrice) > Number(item.unitPrice)
             const discountPct = hasDiscount
-              ? Math.round((1 - item.unitPrice / item.originalPrice) * 100)
+              ? Math.round((1 - Number(item.unitPrice) / Number(item.originalPrice)) * 100)
               : 0
 
             return (
               <div
-                key={item.productId}
-                className={`card p-4 flex gap-3 transition-all ${isSelected ? 'ring-1 ring-red-300 bg-red-50/30' : 'opacity-70'}`}
+                key={item.id} // ← item.id
+                className={`card p-4 flex gap-3 transition-all
+                  ${isSelected ? 'ring-1 ring-red-300 bg-red-50/30' : 'opacity-70'}`}
               >
                 {/* Checkbox */}
                 <div className="flex items-center pt-1">
                   <input
                     type="checkbox"
                     checked={isSelected}
-                    onChange={() => toggleOne(item.productId)}
+                    onChange={() => toggleOne(item.id)} // ← item.id
                     className="w-4 h-4 accent-red-500 cursor-pointer"
                   />
                 </div>
 
-                {/* Ảnh (click → chi tiết sản phẩm) */}
+                {/* Ảnh */}
                 <div
                   className="relative w-20 h-20 bg-gray-100 rounded-xl overflow-hidden flex-shrink-0 cursor-pointer group"
                   onClick={() => navigate(`/products/${item.productSlug || item.productId}`)}
-                  title="Xem chi tiết sản phẩm"
                 >
                   {item.productImage ? (
                     <img
@@ -205,7 +215,6 @@ export default function CartPage() {
 
                 {/* Thông tin sản phẩm */}
                 <div className="flex-1 min-w-0">
-                  {/* Tên → click điều hướng */}
                   <h3
                     className="text-sm font-semibold text-gray-800 line-clamp-2 mb-1 cursor-pointer hover:text-red-500 transition-colors"
                     onClick={() => navigate(`/products/${item.productSlug || item.productId}`)}
@@ -213,11 +222,12 @@ export default function CartPage() {
                     {item.productName}
                   </h3>
 
-                  {/* Variant tags */}
-                  {item.variantValues && Object.entries(item.variantValues).length > 0 && (
+                  {/* Variant tags — backend trả về variantValues map */}
+                  {item.variantValues && Object.keys(item.variantValues).length > 0 && (
                     <div className="flex flex-wrap gap-1 mb-2">
                       {Object.entries(item.variantValues).map(([k, v]) => (
-                        <span key={k} className="inline-block bg-gray-100 text-gray-500 text-[11px] px-2 py-0.5 rounded-md">
+                        <span key={k}
+                          className="inline-block bg-gray-100 text-gray-500 text-[11px] px-2 py-0.5 rounded-md">
                           {k}: {v}
                         </span>
                       ))}
@@ -231,14 +241,18 @@ export default function CartPage() {
 
                   {/* Giá */}
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-red-500 font-bold text-sm">{formatPrice(item.unitPrice)}</span>
+                    <span className="text-red-500 font-bold text-sm">
+                      {formatPrice(item.unitPrice)}
+                    </span>
                     {hasDiscount && (
-                      <span className="text-gray-400 text-xs line-through">{formatPrice(item.originalPrice)}</span>
+                      <span className="text-gray-400 text-xs line-through">
+                        {formatPrice(item.originalPrice)}
+                      </span>
                     )}
                   </div>
 
                   {/* Tồn kho thấp */}
-                  {isLowStock && item.maxStock > 0 && (
+                  {isLowStock && (
                     <p className="text-[11px] text-amber-600 bg-amber-50 px-2 py-1 rounded-md mt-1 inline-block">
                       <i className="fa-solid fa-bolt mr-1"></i>Còn {item.maxStock} sản phẩm
                     </p>
@@ -253,7 +267,7 @@ export default function CartPage() {
                 {/* Điều khiển số lượng + xóa */}
                 <div className="flex flex-col items-end gap-2 flex-shrink-0">
                   <button
-                    onClick={() => handleRemove(item.productId)}
+                    onClick={() => handleRemove(item.id)} // ← item.id
                     className="text-gray-300 hover:text-red-400 transition-colors p-1 -mt-1"
                     title="Xóa sản phẩm"
                   >
@@ -262,7 +276,7 @@ export default function CartPage() {
 
                   <div className="flex items-center border border-gray-200 rounded-xl overflow-hidden">
                     <button
-                      onClick={() => handleUpdateQuantity(item.productId, item.quantity - 1)}
+                      onClick={() => handleUpdateQuantity(item.id, item.quantity - 1)} // ← item.id
                       className="px-3 py-1.5 hover:bg-gray-50 text-gray-600 transition-colors"
                     >
                       <i className="fa-solid fa-minus text-xs"></i>
@@ -271,7 +285,7 @@ export default function CartPage() {
                       {item.quantity}
                     </span>
                     <button
-                      onClick={() => handleUpdateQuantity(item.productId, item.quantity + 1)}
+                      onClick={() => handleUpdateQuantity(item.id, item.quantity + 1)} // ← item.id
                       disabled={item.quantity >= item.maxStock}
                       className="px-3 py-1.5 hover:bg-gray-50 text-gray-600 transition-colors disabled:opacity-30"
                     >
@@ -279,13 +293,16 @@ export default function CartPage() {
                     </button>
                   </div>
 
-                  <p className="text-sm font-bold text-gray-700">{formatPrice(item.subtotal)}</p>
+                  <p className="text-sm font-bold text-gray-700">
+                    {formatPrice(item.subtotal)}
+                  </p>
                 </div>
               </div>
             )
           })}
 
-          <Link to="/products" className="inline-flex items-center gap-2 text-sm text-gray-500 hover:text-red-500 transition-colors mt-2">
+          <Link to="/products"
+            className="inline-flex items-center gap-2 text-sm text-gray-500 hover:text-red-500 transition-colors mt-2">
             <i className="fa-solid fa-arrow-left"></i>Tiếp tục mua sắm
           </Link>
         </div>
@@ -299,23 +316,27 @@ export default function CartPage() {
             finalAmount={finalAmount}
             selectedCount={selected.size}
             formatPrice={formatPrice}
-            onCheckout={() => navigate('/checkout', { state: { selectedIds: [...selected] } })}
+            onCheckout={handleCheckout}
           />
         </div>
       </div>
 
       {/* ── Bottom bar (Mobile) ── */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-3 flex items-center gap-3 lg:hidden z-40 shadow-lg">
+      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-3
+                      flex items-center gap-3 lg:hidden z-40 shadow-lg">
         <div className="flex-1">
           <p className="text-xs text-gray-400">
-            {selected.size > 0 ? `Đã chọn ${selected.size} sản phẩm` : 'Chưa chọn sản phẩm nào'}
+            {selected.size > 0
+              ? `Đã chọn ${selected.size} sản phẩm`
+              : 'Chưa chọn sản phẩm nào'}
           </p>
           <p className="font-bold text-red-500 text-base">{formatPrice(finalAmount)}</p>
         </div>
         <button
-          onClick={() => navigate('/checkout', { state: { selectedIds: [...selected] } })}
+          onClick={handleCheckout}
           disabled={selected.size === 0}
-          className="btn-primary px-6 py-2.5 flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+          className="btn-primary px-6 py-2.5 flex items-center gap-2
+                     disabled:opacity-40 disabled:cursor-not-allowed"
         >
           <i className="fa-solid fa-lock text-sm"></i>
           Thanh toán ({selected.size})
@@ -325,21 +346,25 @@ export default function CartPage() {
   )
 }
 
-// ─── Component tóm tắt (dùng lại cho Desktop) ────────────────────────────────
-function OrderSummary({ selectedItems, selectedTotal, shippingFee, finalAmount, selectedCount, formatPrice, onCheckout }) {
+// ─── OrderSummary component ───────────────────────────────────────────────────
+function OrderSummary({
+  selectedItems, selectedTotal, shippingFee,
+  finalAmount, selectedCount, formatPrice, onCheckout
+}) {
   return (
     <div className="card p-6 h-fit sticky top-20">
       <h2 className="font-bold text-gray-800 mb-4 text-lg">Tóm tắt đơn hàng</h2>
 
-      {/* Danh sách sản phẩm được chọn */}
       {selectedItems.length > 0 ? (
         <div className="space-y-2 mb-4 pb-4 border-b border-gray-100">
           {selectedItems.map(item => (
-            <div key={item.productId} className="flex justify-between text-sm">
+            <div key={item.id} className="flex justify-between text-sm">
               <span className="text-gray-500 line-clamp-1 flex-1 mr-2">
                 {item.productName} ×{item.quantity}
               </span>
-              <span className="text-gray-700 flex-shrink-0">{formatPrice(item.subtotal)}</span>
+              <span className="text-gray-700 flex-shrink-0">
+                {formatPrice(item.subtotal)}
+              </span>
             </div>
           ))}
         </div>
@@ -359,13 +384,17 @@ function OrderSummary({ selectedItems, selectedTotal, shippingFee, finalAmount, 
             <i className="fa-solid fa-truck text-blue-400"></i>Phí vận chuyển
           </span>
           <span className={shippingFee === 0 && selectedTotal > 0 ? 'text-green-600 font-medium' : ''}>
-            {selectedTotal === 0 ? '—' : shippingFee === 0 ? 'Miễn phí' : formatPrice(shippingFee)}
+            {selectedTotal === 0
+              ? '—'
+              : shippingFee === 0
+                ? 'Miễn phí'
+                : formatPrice(shippingFee)}
           </span>
         </div>
         {shippingFee > 0 && selectedTotal > 0 && (
           <p className="text-xs text-orange-500 bg-orange-50 rounded-lg px-3 py-2">
             <i className="fa-solid fa-circle-info mr-1"></i>
-            Mua thêm {formatPrice(500000 - selectedTotal)} để được miễn phí ship
+            Mua thêm {formatPrice(500_000 - selectedTotal)} để được miễn phí ship
           </p>
         )}
       </div>
@@ -378,7 +407,8 @@ function OrderSummary({ selectedItems, selectedTotal, shippingFee, finalAmount, 
       <button
         onClick={onCheckout}
         disabled={selectedCount === 0}
-        className="btn-primary w-full py-3 flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+        className="btn-primary w-full py-3 flex items-center justify-center gap-2
+                   disabled:opacity-40 disabled:cursor-not-allowed"
       >
         <i className="fa-solid fa-lock"></i>
         Thanh toán {selectedCount > 0 ? `(${selectedCount} sản phẩm)` : ''}

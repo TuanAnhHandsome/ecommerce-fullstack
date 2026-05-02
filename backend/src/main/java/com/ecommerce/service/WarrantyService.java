@@ -8,16 +8,16 @@ import org.springframework.data.domain.Pageable;
 
 public interface WarrantyService {
 
-    /** Khách hàng tạo yêu cầu */
+    /** Khách tạo yêu cầu (form standalone hoặc từ OrderDetailPage) */
     WarrantyResponse create(String email, CreateWarrantyRequest request);
 
-    /** Khách hàng xem yêu cầu của mình */
+    /** Khách xem danh sách yêu cầu của mình */
     PageResponse<WarrantyResponse> getMyRequests(String email, Pageable pageable);
 
-    /** Tra cứu công khai theo mã yêu cầu hoặc SĐT */
+    /** Tra cứu công khai theo mã yêu cầu */
     WarrantyResponse lookup(String requestCode);
 
-    /** Admin: danh sách tất cả */
+    /** Admin: danh sách tất cả, filter theo status + keyword */
     PageResponse<WarrantyResponse> adminList(String status, String keyword, Pageable pageable);
 
     /** Admin: cập nhật trạng thái + ghi chú */

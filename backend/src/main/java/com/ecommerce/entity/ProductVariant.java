@@ -29,15 +29,24 @@ public class ProductVariant {
     private BigDecimal salePrice;
 
     @Column(name = "stock_qty", nullable = false)
+    @Builder.Default
     private Integer stockQty = 0;
 
     @Column(nullable = false)
+    @Builder.Default
     private Boolean active = true;
 
     @Column(name = "sort_order")
+    @Builder.Default
     private Integer sortOrder = 0;
 
-    @ManyToMany
+    /**
+     * EAGER — variantValues luôn cần thiết để:
+     * 1. Hiển thị tên variant trong CartResponse (buildCartResponse)
+     * 2. Build variantName trong OrderItem (buildVariantName)
+     * Số lượng values mỗi variant rất nhỏ (2-5 items) nên EAGER an toàn.
+     */
+    @ManyToMany(fetch = FetchType.EAGER)
     @JoinTable(
         name = "product_variant_values",
         joinColumns = @JoinColumn(name = "variant_id"),

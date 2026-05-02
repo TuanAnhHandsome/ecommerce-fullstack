@@ -10,6 +10,7 @@ export default function ProductInfo({
   qty, setQty,
   handleAddToCart,
   onBuyNow,
+  buyNowLoading = false,
 }) {
   return (
     <div>
@@ -72,9 +73,10 @@ export default function ProductInfo({
         <div key={opt.id} className="mb-4">
           <p className="text-sm font-medium text-gray-700 mb-2">
             {opt.name}:
-            {selectedValues[opt.name] && (
-              <span className="ml-2 text-red-500">{selectedValues[opt.name]}</span>
-            )}
+            {selectedValues[opt.name]
+              ? <span className="ml-2 text-red-500">{selectedValues[opt.name]}</span>
+              : <span className="ml-2 text-gray-400 font-normal text-xs">Chưa chọn</span>
+            }
           </p>
           <div className="flex gap-2 flex-wrap">
             {opt.values.map(val => {
@@ -123,7 +125,9 @@ export default function ProductInfo({
               >
                 <i className="fa-solid fa-minus text-xs"></i>
               </button>
-              <span className="px-5 py-2.5 text-sm font-bold border-x border-gray-200 min-w-[48px] text-center">{qty}</span>
+              <span className="px-5 py-2.5 text-sm font-bold border-x border-gray-200 min-w-[48px] text-center">
+                {qty}
+              </span>
               <button
                 onClick={() => setQty(q => Math.min(currentStock, q + 1))}
                 className="px-4 py-2.5 hover:bg-gray-50 text-gray-600 font-bold transition-colors"
@@ -133,12 +137,26 @@ export default function ProductInfo({
             </div>
             <span className="text-xs text-gray-400">Còn {currentStock}</span>
           </div>
+
           <div className="flex gap-3">
-            <button onClick={handleAddToCart} className="btn-secondary flex-1 py-3 flex items-center justify-center gap-2">
+            <button
+              onClick={handleAddToCart}
+              disabled={buyNowLoading}
+              className="btn-secondary flex-1 py-3 flex items-center justify-center gap-2
+                         disabled:opacity-50 disabled:cursor-not-allowed"
+            >
               <i className="fa-solid fa-cart-plus"></i>Thêm vào giỏ
             </button>
-            <button onClick={onBuyNow} className="btn-primary flex-1 py-3 flex items-center justify-center gap-2">
-              <i className="fa-solid fa-bolt text-yellow-300"></i>Mua ngay
+            <button
+              onClick={onBuyNow}
+              disabled={buyNowLoading}
+              className="btn-primary flex-1 py-3 flex items-center justify-center gap-2
+                         disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {buyNowLoading
+                ? <><i className="fa-solid fa-spinner fa-spin"></i>Đang xử lý...</>
+                : <><i className="fa-solid fa-bolt text-yellow-300"></i>Mua ngay</>
+              }
             </button>
           </div>
         </div>
@@ -147,10 +165,10 @@ export default function ProductInfo({
       {/* Policies */}
       <div className="pt-4 border-t border-gray-100 grid grid-cols-2 gap-2">
         {[
-          { icon: 'fa-truck', color: 'text-blue-500', text: 'Miễn ship từ 500k' },
-          { icon: 'fa-shield-halved', color: 'text-green-500', text: 'Bảo hành 12 tháng' },
-          { icon: 'fa-rotate-left', color: 'text-orange-500', text: 'Đổi trả 7 ngày' },
-          { icon: 'fa-credit-card', color: 'text-purple-500', text: 'Trả góp 0%' },
+          { icon: 'fa-truck',         color: 'text-blue-500',   text: 'Miễn ship từ 500k' },
+          { icon: 'fa-shield-halved', color: 'text-green-500',  text: 'Bảo hành 12 tháng' },
+          { icon: 'fa-rotate-left',   color: 'text-orange-500', text: 'Đổi trả 7 ngày' },
+          { icon: 'fa-credit-card',   color: 'text-purple-500', text: 'Trả góp 0%' },
         ].map(p => (
           <div key={p.text} className="flex items-center gap-2 text-xs text-gray-500">
             <i className={`fa-solid ${p.icon} ${p.color} w-4`}></i>

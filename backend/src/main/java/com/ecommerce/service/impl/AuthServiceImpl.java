@@ -48,9 +48,11 @@ public class AuthServiceImpl implements AuthService {
         emailService.sendOtpEmail(email, otp);
     }
 
+    // AuthServiceImpl.java
     @Override
     public boolean verifyOtp(String email, String otp) {
-        return otpStore.verify(email, otp);
+        boolean ok = otpStore.verify(email, otp); // verify + mark verified trong 1 bước
+        return ok;
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -62,10 +64,15 @@ public class AuthServiceImpl implements AuthService {
         if (userRepository.existsByEmail(request.getEmail())) {
             throw new BusinessException("Email đã được sử dụng");
         }
-        if (!otpStore.isVerified(request.getEmail())) {
-            throw new BusinessException("Vui lòng xác thực OTP trước khi đăng ký");
+
+        // 2. Verify OTP trực tiếp tại đây
+        boolean validOtp = otpStore.verify(
+                request.getEmail(),
+                request.getOtp());
+
+        if (!validOtp) {
+            throw new BusinessException("Mã OTP không đúng hoặc đã hết hạn");
         }
-        otpStore.clearVerified(request.getEmail());
 
         User user = User.builder()
                 .fullName(request.getFullName())
@@ -79,7 +86,7 @@ public class AuthServiceImpl implements AuthService {
         userRepository.save(user);
 
         UserDetails userDetails = userDetailsService.loadUserByUsername(user.getEmail());
-        String accessToken  = jwtService.generateAccessToken(userDetails);
+        String accessToken = jwtService.generateAccessToken(userDetails);
         String refreshToken = jwtService.generateRefreshToken(userDetails);
 
         return AuthResponse.builder()
@@ -92,14 +99,13 @@ public class AuthServiceImpl implements AuthService {
     @Override
     public AuthResponse login(LoginRequest request) {
         authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword())
-        );
+                new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword()));
 
         User user = userRepository.findByEmail(request.getEmail())
                 .orElseThrow(() -> new BusinessException("Không tìm thấy tài khoản"));
 
         UserDetails userDetails = userDetailsService.loadUserByUsername(user.getEmail());
-        String accessToken  = jwtService.generateAccessToken(userDetails);
+        String accessToken = jwtService.generateAccessToken(userDetails);
         String refreshToken = jwtService.generateRefreshToken(userDetails);
 
         return AuthResponse.builder()

@@ -23,15 +23,24 @@ public class ReviewController {
 
     private final ReviewService reviewService;
 
+    /**
+     * GET /products/{productId}/reviews
+     * Public — lấy danh sách review + summary của 1 product.
+     */
     @GetMapping
     public ResponseEntity<ReviewSummaryResponse> getReviews(
             @PathVariable Long productId,
-            @RequestParam(defaultValue = "0")  int page,
-            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(defaultValue = "0")         int page,
+            @RequestParam(defaultValue = "10")        int size,
             @RequestParam(defaultValue = "createdAt") String sortBy) {
         return ResponseEntity.ok(reviewService.getReviews(productId, page, size, sortBy));
     }
 
+    /**
+     * POST /products/{productId}/reviews
+     * Authenticated — tạo review (multipart: JSON part "review" + file part "images").
+     * Backend tự verify order DELIVERED qua orderId trong request body.
+     */
     @PostMapping
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<ReviewResponse> createReview(
@@ -40,9 +49,14 @@ public class ReviewController {
             @Valid @RequestPart("review") CreateReviewRequest request,
             @RequestPart(value = "images", required = false) List<MultipartFile> images) {
         return ResponseEntity.ok(
-            reviewService.createReview(userDetails.getUsername(), productId, request, images));
+                reviewService.createReview(userDetails.getUsername(), productId, request, images)
+        );
     }
 
+    /**
+     * DELETE /products/{productId}/reviews/{reviewId}
+     * Authenticated — chỉ chủ review mới được xoá.
+     */
     @DeleteMapping("/{reviewId}")
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<ApiResponse> deleteReview(

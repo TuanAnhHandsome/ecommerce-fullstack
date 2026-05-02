@@ -23,7 +23,6 @@ public class ProductSpecification {
                 cb.equal(root.get("category").get("id"), categoryId);
     }
 
-    // Lọc theo effectivePrice = salePrice nếu có, không thì price
     public static Specification<Product> minPrice(BigDecimal min) {
         return (root, query, cb) ->
                 min == null ? null :

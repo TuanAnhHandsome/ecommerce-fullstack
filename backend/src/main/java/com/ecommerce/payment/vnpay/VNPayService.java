@@ -7,6 +7,7 @@ import com.ecommerce.enums.PaymentGateway;
 import com.ecommerce.enums.PaymentStatus;
 import com.ecommerce.repository.OrderRepository;
 import com.ecommerce.repository.PaymentRepository;
+import com.ecommerce.service.EmailService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
@@ -31,6 +32,7 @@ public class VNPayService {
     private final OrderRepository orderRepository;
     private final PaymentRepository paymentRepository;
     private final ObjectMapper objectMapper;
+    private final EmailService emailService;
 
     /**
      * Tạo URL thanh toán VNPay
@@ -60,9 +62,6 @@ public class VNPayService {
         vnpParams.put("vnp_IpAddr",     ipAddr);
         vnpParams.put("vnp_CreateDate", createDate);
 
-        // ✅ ĐÚNG THEO DEMO CHÍNH THỨC VNPAY:
-        // hashData = key=URLEncode(value) — encode value bằng US_ASCII
-        // query    = URLEncode(key)=URLEncode(value)
         StringBuilder hashData = new StringBuilder();
         StringBuilder query    = new StringBuilder();
 
@@ -79,7 +78,6 @@ public class VNPayService {
             }
         });
 
-        // Ký HMAC-SHA512
         String hashSecret = vnPayConfig.getHashSecret().trim();
         String secureHash = hmacSHA512(hashSecret, hashData.toString());
         query.append("&vnp_SecureHash=").append(secureHash);
@@ -101,7 +99,6 @@ public class VNPayService {
             String vnpSecureHash = vnpParams.remove("vnp_SecureHash");
             vnpParams.remove("vnp_SecureHashType");
 
-            // Verify chữ ký — cùng cách build với createPaymentUrl
             String signedData = buildHashData(vnpParams);
             String checkHash  = hmacSHA512(vnPayConfig.getHashSecret().trim(), signedData);
 
@@ -122,7 +119,9 @@ public class VNPayService {
             String payDate       = vnpParams.get("vnp_PayDate");
             long   vnpAmount     = Long.parseLong(vnpParams.get("vnp_Amount"));
 
-            Order order = orderRepository.findByOrderCode(txnRef).orElse(null);
+            // ✅ FIX: dùng JOIN FETCH để load sẵn user + orderItems trong cùng transaction
+            // tránh LazyInitializationException khi @Async email thread chạy sau khi Session đóng
+            Order order = orderRepository.findByOrderCodeWithDetails(txnRef).orElse(null);
             if (order == null) {
                 result.put("RspCode", "01");
                 result.put("Message", "Order not found");
@@ -159,6 +158,7 @@ public class VNPayService {
                     paymentRepository.save(payment);
                 });
 
+                emailService.sendOrderConfirmation(order);
                 log.info("✅ IPN: Thanh toán THÀNH CÔNG cho order {}", txnRef);
             } else {
                 order.setStatus(OrderStatus.CANCELLED);
@@ -211,10 +211,6 @@ public class VNPayService {
         paymentRepository.save(payment);
     }
 
-    /**
-     * ✅ Build hashData đúng chuẩn VNPay:
-     * Sort params theo TreeMap, encode value bằng US_ASCII
-     */
     private String buildHashData(Map<String, String> params) {
         StringBuilder sb = new StringBuilder();
         new TreeMap<>(params).forEach((key, value) -> {
@@ -250,7 +246,6 @@ public class VNPayService {
             ip = request.getRemoteAddr();
         if (ip != null && ip.contains(","))
             ip = ip.split(",")[0].trim();
-        // Fix IPv6 loopback → IPv4
         if ("0:0:0:0:0:0:0:1".equals(ip) || "::1".equals(ip))
             ip = "127.0.0.1";
         return ip != null ? ip : "127.0.0.1";

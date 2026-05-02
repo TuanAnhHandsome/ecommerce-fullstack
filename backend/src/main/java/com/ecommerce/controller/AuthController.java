@@ -30,9 +30,10 @@ public class AuthController {
         return ResponseEntity.ok(authService.login(request));
     }
 
+    // AuthController.java
     @PostMapping("/refresh")
-    public ResponseEntity<AuthResponse> refresh(@RequestParam String refreshToken) {
-        return ResponseEntity.ok(authService.refreshToken(refreshToken));
+    public ResponseEntity<AuthResponse> refresh(@RequestBody Map<String, String> body) {
+        return ResponseEntity.ok(authService.refreshToken(body.get("refreshToken")));
     }
 
     @PostMapping("/send-otp")

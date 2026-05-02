@@ -54,6 +54,19 @@ public class UserProfileService {
         log.info("Password changed for user: {}", email);
     }
 
+    // ── THÊM METHOD NÀY ─────────────────────────────────────────
+    public void verifyPassword(String email, String rawPassword) {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        if (!passwordEncoder.matches(rawPassword, user.getPassword())) {
+            throw new RuntimeException("Mật khẩu không đúng");
+        }
+
+        log.info("Password verified for user: {}", email);
+    }
+    // ────────────────────────────────────────────────────────────
+
     private ProfileResponse mapToResponse(User user) {
         return ProfileResponse.builder()
                 .id(user.getId())

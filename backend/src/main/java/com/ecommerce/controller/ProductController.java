@@ -34,13 +34,20 @@ public class ProductController {
             @RequestParam(required = false) Long categoryId,
             @RequestParam(defaultValue = "createdAt") String sortBy,
             @RequestParam(defaultValue = "desc") String sortDir,
-            @RequestParam(required = false) BigDecimal minPrice,   // ← thêm
-            @RequestParam(required = false) BigDecimal maxPrice) { // ← thêm
+            @RequestParam(required = false) BigDecimal minPrice,
+            @RequestParam(required = false) BigDecimal maxPrice,
+            @RequestParam(defaultValue = "false") boolean includeInactive) {
 
         var pageable = PageRequest.of(page, size,
                 Sort.Direction.fromString(sortDir), sortBy);
-        return ResponseEntity.ok(
-                productService.getProducts(pageable, keyword, categoryId, minPrice, maxPrice));
+
+        // includeInactive=true chỉ dành cho admin (đã bảo vệ ở FE bằng role)
+        // Nếu cần bảo vệ cả BE, có thể thêm @PreAuthorize vào đây
+        var result = includeInactive
+                ? productService.getProductsAdmin(pageable, keyword, categoryId, minPrice, maxPrice)
+                : productService.getProducts(pageable, keyword, categoryId, minPrice, maxPrice);
+
+        return ResponseEntity.ok(result);
     }
 
     @GetMapping("/{id}")
@@ -70,6 +77,15 @@ public class ProductController {
             @Valid @RequestPart("product") ProductRequest request,
             @RequestPart(value = "images", required = false) List<MultipartFile> images) {
         return ResponseEntity.ok(productService.updateProduct(id, request, images));
+    }
+
+    @PatchMapping("/{id}/active")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<ApiResponse> toggleActive(
+            @PathVariable Long id,
+            @RequestParam boolean active) {
+        productService.setActive(id, active);
+        return ResponseEntity.ok(ApiResponse.success("Cập nhật trạng thái thành công"));
     }
 
     @DeleteMapping("/{id}")

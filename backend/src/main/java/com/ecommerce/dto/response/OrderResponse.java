@@ -23,12 +23,22 @@ public class OrderResponse {
     private List<OrderItemResponse> orderItems;
     private PaymentInfo payment;
     private LocalDateTime createdAt;
+    private String cancelReason;
+    private LocalDateTime cancelledAt;
+    private String cancelledBy;
+    private String couponCode;
 
     @Data @Builder @NoArgsConstructor @AllArgsConstructor
     public static class OrderItemResponse {
+        private Long id;
         private Long productId;
         private String productName;
         private String productImg;
+        /** null nếu không có variant */
+        private Long variantId;
+        /** Tên variant hiển thị, ví dụ "Màu: Đỏ / Size: XL" */
+        private String variantName;
+        private String sku;
         private BigDecimal unitPrice;
         private Integer quantity;
         private BigDecimal subtotal;

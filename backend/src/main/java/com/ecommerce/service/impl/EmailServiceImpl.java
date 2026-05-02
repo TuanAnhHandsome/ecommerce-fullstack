@@ -1,8 +1,10 @@
 package com.ecommerce.service.impl;
 
 import com.ecommerce.entity.Order;
+import com.ecommerce.entity.ReturnRequest; // Thêm import mới
 import com.ecommerce.service.EmailService;
 import jakarta.mail.MessagingException;
+import jakarta.mail.internet.InternetAddress;
 import jakarta.mail.internet.MimeMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -12,10 +14,10 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.thymeleaf.TemplateEngine;
 import org.thymeleaf.context.Context;
-import jakarta.mail.internet.InternetAddress;
 
 import java.text.NumberFormat;
 import java.util.Locale;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -27,6 +29,33 @@ public class EmailServiceImpl implements EmailService {
 
     private static final String FROM_EMAIL = "noreply@ecommerce.com";
     private static final String FROM_NAME = "EShop";
+
+    // ─────────────────────────────────────────────────────────────
+    // CONSTANTS FOR RETURN REQUESTS
+    // ─────────────────────────────────────────────────────────────
+
+    private static final Map<String, String> STATUS_LABELS = Map.of(
+            "PENDING",    "Chờ duyệt",
+            "APPROVED",   "Đã duyệt",
+            "RECEIVED",   "Đã nhận hàng",
+            "INSPECTING", "Đang kiểm tra",
+            "REFUNDING",  "Đang hoàn tiền",
+            "COMPLETED",  "Hoàn tất",
+            "REJECTED",   "Từ chối"
+    );
+
+    private static final Map<String, String> REASON_LABELS = Map.of(
+            "WRONG_ITEM",       "Sai sản phẩm / màu / size",
+            "DEFECTIVE",        "Hàng lỗi / hư hỏng",
+            "NOT_AS_DESCRIBED", "Không đúng mô tả",
+            "CHANGED_MIND",     "Đổi ý không muốn mua",
+            "MISSING_PARTS",    "Thiếu phụ kiện",
+            "OTHER",            "Lý do khác"
+    );
+
+    // ─────────────────────────────────────────────────────────────
+    // ORDER METHODS
+    // ─────────────────────────────────────────────────────────────
 
     @Override
     @Async
@@ -69,6 +98,75 @@ public class EmailServiceImpl implements EmailService {
         }
     }
 
+    // ─────────────────────────────────────────────────────────────
+    // RETURN REQUEST METHODS (NEW)
+    // ─────────────────────────────────────────────────────────────
+
+    @Override
+    @Async
+    public void sendReturnRequestConfirmation(ReturnRequest rr) {
+        try {
+            Context ctx = new Context();
+            ctx.setVariable("customerName", rr.getUser().getFullName());
+            ctx.setVariable("returnCode", rr.getReturnCode());
+            ctx.setVariable("orderCode", rr.getOrder().getOrderCode());
+            ctx.setVariable("reasonLabel", REASON_LABELS.getOrDefault(
+                    rr.getReason().name(), rr.getReason().name()));
+            ctx.setVariable("description", rr.getDescription());
+            ctx.setVariable("returnItems", rr.getReturnItems());
+            ctx.setVariable("statusLabel", "Chờ duyệt");
+
+            String html = templateEngine.process("email/return-request-confirmation", ctx);
+            sendEmail(rr.getUser().getEmail(), 
+                      "Yêu cầu hoàn hàng #" + rr.getReturnCode() + " đã được ghi nhận", 
+                      html);
+
+            log.info("Return confirmation email sent to {} for {}", 
+                     rr.getUser().getEmail(), rr.getReturnCode());
+        } catch (Exception e) {
+            log.error("Failed to send return confirmation email: {}", e.getMessage());
+        }
+    }
+
+    @Override
+    @Async
+    public void sendReturnStatusUpdate(ReturnRequest rr) {
+        // Chỉ gửi email cho các trạng thái quan trọng
+        boolean shouldNotify = switch (rr.getStatus()) {
+            case APPROVED, COMPLETED, REJECTED -> true;
+            default -> false;
+        };
+        if (!shouldNotify) return;
+
+        try {
+            Context ctx = new Context();
+            ctx.setVariable("customerName", rr.getUser().getFullName());
+            ctx.setVariable("returnCode", rr.getReturnCode());
+            ctx.setVariable("orderCode", rr.getOrder().getOrderCode());
+            ctx.setVariable("status", rr.getStatus().name());
+            ctx.setVariable("statusLabel", STATUS_LABELS.getOrDefault(
+                    rr.getStatus().name(), rr.getStatus().name()));
+            ctx.setVariable("adminNote", rr.getAdminNote());
+            ctx.setVariable("rejectReason", rr.getRejectReason());
+            ctx.setVariable("refundAmount", rr.getRefundAmount());
+            ctx.setVariable("refundMethod", rr.getRefundMethod());
+
+            String html = templateEngine.process("email/return-status-update", ctx);
+            sendEmail(rr.getUser().getEmail(), 
+                      "Cập nhật yêu cầu hoàn hàng #" + rr.getReturnCode(), 
+                      html);
+
+            log.info("Return status update email sent to {} — status: {}",
+                     rr.getUser().getEmail(), rr.getStatus());
+        } catch (Exception e) {
+            log.error("Failed to send return status update email: {}", e.getMessage());
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // OTP METHOD
+    // ─────────────────────────────────────────────────────────────
+
     @Override
     @Async
     public void sendOtpEmail(String toEmail, String otp) {
@@ -83,7 +181,6 @@ public class EmailServiceImpl implements EmailService {
                           <table width="480" cellpadding="0" cellspacing="0"
                                  style="background:#ffffff;border-radius:16px;overflow:hidden;
                                         box-shadow:0 4px 24px rgba(0,0,0,0.08)">
-                            <!-- Header -->
                             <tr>
                               <td style="background:linear-gradient(135deg,#ef4444,#f97316);
                                          padding:32px;text-align:center">
@@ -91,7 +188,6 @@ public class EmailServiceImpl implements EmailService {
                                              letter-spacing:-0.5px">EShop</span>
                               </td>
                             </tr>
-                            <!-- Body -->
                             <tr>
                               <td style="padding:40px 40px 32px">
                                 <h2 style="margin:0 0 8px;font-size:22px;color:#1f2937">
@@ -101,7 +197,6 @@ public class EmailServiceImpl implements EmailService {
                                   Cảm ơn bạn đã đăng ký EShop! Vui lòng dùng mã OTP bên dưới
                                   để hoàn tất đăng ký. Mã có hiệu lực trong <strong>5 phút</strong>.
                                 </p>
-                                <!-- OTP Box -->
                                 <div style="background:#fef2f2;border:2px dashed #fca5a5;
                                             border-radius:12px;text-align:center;padding:28px 0;
                                             margin-bottom:28px">
@@ -115,7 +210,6 @@ public class EmailServiceImpl implements EmailService {
                                 </p>
                               </td>
                             </tr>
-                            <!-- Footer -->
                             <tr>
                               <td style="background:#f9fafb;padding:20px 40px;
                                          border-top:1px solid #f3f4f6;text-align:center">
@@ -139,7 +233,7 @@ public class EmailServiceImpl implements EmailService {
     }
 
     // ─────────────────────────────────────────────────────────────
-    // Private helpers
+    // PRIVATE HELPERS
     // ─────────────────────────────────────────────────────────────
 
     private void sendEmail(String to, String subject, String htmlBody) throws MessagingException {

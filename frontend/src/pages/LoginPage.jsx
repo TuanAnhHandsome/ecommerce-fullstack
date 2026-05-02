@@ -53,11 +53,12 @@ export default function LoginPage() {
 
     setLoading(true)
     try {
+      const authPages = ['/login', '/register']
       const user = await login(form.email, form.password)
       toast.success(`Chào mừng ${user.fullName}!`)
       setTimeout(() => {
         if (user.role === 'ADMIN') navigate('/admin', { replace: true })
-        else navigate(from === '/login' ? '/' : from, { replace: true })
+        else navigate(authPages.includes(from) ? '/' : from, { replace: true })
       }, 100)
     } catch (err) {
       toast.error(err.response?.data?.message || 'Email hoặc mật khẩu không đúng')

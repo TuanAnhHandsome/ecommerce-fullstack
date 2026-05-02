@@ -14,12 +14,20 @@ public interface ProductService {
             Pageable pageable,
             String keyword,
             Long categoryId,
-            BigDecimal minPrice,   // ← thêm
-            BigDecimal maxPrice);  // ← thêm
+            BigDecimal minPrice,
+            BigDecimal maxPrice);
+
+    PageResponse<ProductResponse> getProductsAdmin(
+            Pageable pageable,
+            String keyword,
+            Long categoryId,
+            BigDecimal minPrice,
+            BigDecimal maxPrice);
 
     ProductResponse getProductById(Long id);
     ProductResponse getProductBySlug(String slug);
     ProductResponse createProduct(ProductRequest request, List<MultipartFile> images);
     ProductResponse updateProduct(Long id, ProductRequest request, List<MultipartFile> images);
     void deleteProduct(Long id);
+    void setActive(Long id, boolean active);
 }

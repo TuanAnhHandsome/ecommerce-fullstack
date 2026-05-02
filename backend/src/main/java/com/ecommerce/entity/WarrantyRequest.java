@@ -25,7 +25,6 @@ public class WarrantyRequest {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    /** Mã yêu cầu — VD: WR-20240115-0042 */
     @Column(name = "request_code", nullable = false, unique = true, length = 50)
     private String requestCode;
 
@@ -33,43 +32,36 @@ public class WarrantyRequest {
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
-    /** Đơn hàng liên quan (nullable — khách có thể không nhớ mã đơn) */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "order_id")
     private Order order;
 
-    /** Tên sản phẩm cần bảo hành (nhập tay — linh hoạt hơn FK product) */
     @Column(name = "product_name", nullable = false, length = 255)
     private String productName;
 
-    /** Serial number / IMEI nếu có */
     @Column(name = "serial_number", length = 100)
     private String serialNumber;
 
-    /** Loại yêu cầu */
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 20)
+    // Force VARCHAR để khớp schema hiện tại trong DB
+    @Column(nullable = false, length = 20, columnDefinition = "VARCHAR(20)")
     private WarrantyType type;
 
-    /** Trạng thái xử lý */
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 20)
+    // Force VARCHAR để khớp schema hiện tại trong DB
+    @Column(nullable = false, length = 20, columnDefinition = "VARCHAR(20)")
     @Builder.Default
     private WarrantyStatus status = WarrantyStatus.PENDING;
 
-    /** Mô tả lỗi / lý do từ khách */
     @Column(nullable = false, columnDefinition = "TEXT")
     private String description;
 
-    /** Ghi chú nội bộ từ admin */
     @Column(name = "admin_note", columnDefinition = "TEXT")
     private String adminNote;
 
-    /** Ngày dự kiến trả máy */
     @Column(name = "estimated_return_date")
     private LocalDateTime estimatedReturnDate;
 
-    /** Ngày thực tế hoàn thành */
     @Column(name = "resolved_at")
     private LocalDateTime resolvedAt;
 

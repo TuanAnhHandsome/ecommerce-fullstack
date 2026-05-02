@@ -3,7 +3,9 @@ package com.ecommerce.dto.request;
 import jakarta.validation.constraints.*;
 import lombok.*;
 
-@Data @NoArgsConstructor @AllArgsConstructor
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
 public class RegisterRequest {
     @NotBlank(message = "Họ tên không được để trống")
     @Size(min = 2, max = 100)
@@ -19,4 +21,8 @@ public class RegisterRequest {
 
     @Pattern(regexp = "^[0-9]{10,11}$", message = "Số điện thoại không hợp lệ")
     private String phone;
+
+    @NotBlank(message = "Mã OTP không được để trống")
+    @Pattern(regexp = "^[0-9]{6}$", message = "OTP phải gồm đúng 6 chữ số")
+    private String otp;
 }

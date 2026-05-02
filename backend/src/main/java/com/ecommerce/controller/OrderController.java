@@ -46,6 +46,15 @@ public class OrderController {
         return ResponseEntity.ok(orderService.getOrderById(userDetails.getUsername(), id));
     }
 
+    @PutMapping("/{id}/cancel")
+    public ResponseEntity<OrderResponse> cancelOrder(
+            @AuthenticationPrincipal UserDetails userDetails,
+            @PathVariable Long id,
+            @RequestParam(required = false, defaultValue = "") String reason) {
+        return ResponseEntity.ok(
+                orderService.cancelOrder(userDetails.getUsername(), id, reason));
+    }
+
     // Admin: get all orders
     @GetMapping("/admin/all")
     @PreAuthorize("hasRole('ADMIN')")

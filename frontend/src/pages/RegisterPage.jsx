@@ -231,21 +231,15 @@ export default function RegisterPage() {
   // Step 1 → 2: verify OTP + register
   const handleVerifyAndRegister = async (e) => {
     e.preventDefault()
-    if (otp.length < 6) {
-      toast.error('Vui lòng nhập đủ 6 chữ số')
-      return
-    }
+    if (otp.length < 6) { toast.error('Vui lòng nhập đủ 6 chữ số'); return }
     setLoading(true)
     try {
-      // verify OTP
-      await authAPI.verifyOtp(form.email, otp)
-      // register
-      await register(form)
+      await register({ ...form, otp }) // 1 request duy nhất
       setStep(2)
-      toast.success('Đăng ký thành công! Chào mừng bạn đến với EShop 🎉')
+      toast.success('Đăng ký thành công!')
       setTimeout(() => navigate('/'), 2000)
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Xác thực thất bại, kiểm tra lại mã OTP')
+      toast.error(err.response?.data?.message || 'Xác thực thất bại')
     } finally {
       setLoading(false)
     }

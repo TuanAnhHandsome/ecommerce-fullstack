@@ -11,6 +11,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Map;
+
 @RestController
 @RequestMapping("/user")
 @RequiredArgsConstructor
@@ -39,4 +41,15 @@ public class UserProfileController {
         profileService.changePassword(auth.getName(), req);
         return ResponseEntity.ok(ApiResponse.success("Đổi mật khẩu thành công"));
     }
+
+    // ── THÊM ENDPOINT NÀY ───────────────────────────────────────
+    @PostMapping("/verify-password")
+    public ResponseEntity<ApiResponse> verifyPassword(
+            Authentication auth,
+            @RequestBody Map<String, String> body) {
+        String password = body.get("password");
+        profileService.verifyPassword(auth.getName(), password);
+        return ResponseEntity.ok(ApiResponse.success("Xác thực thành công"));
+    }
+    // ────────────────────────────────────────────────────────────
 }

@@ -13,4 +13,5 @@ public interface OrderService {
     PageResponse<OrderResponse> getAllOrders(Pageable pageable, String status);
     OrderResponse updateOrderStatus(Long id, String status);
     Order getOrderEntityForPayment(String email, Long orderId);
+    OrderResponse cancelOrder(String email, Long orderId, String reason);
 }

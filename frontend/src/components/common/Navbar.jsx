@@ -15,7 +15,7 @@ export default function Navbar() {
 
   useEffect(() => {
     if (isAuthenticated) fetchCart()
-  }, [isAuthenticated])
+  }, [isAuthenticated, fetchCart])
 
   useEffect(() => {
     const handler = (e) => {
@@ -46,17 +46,17 @@ export default function Navbar() {
     `relative text-sm font-medium px-3 py-2 rounded-lg overflow-hidden
      flex items-center gap-1.5 transition-colors duration-150
      ${isActive(path)
-       ? 'text-red-500 bg-red-50'
-       : 'text-gray-600 hover:text-red-500 hover:bg-red-50'
-     }`
+      ? 'text-red-500 bg-red-50'
+      : 'text-gray-600 hover:text-red-500 hover:bg-red-50'
+    }`
 
   // ── Class động cho nav link mobile ──
   const mobileNavClass = (path) =>
     `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors duration-150
      ${isActive(path)
-       ? 'text-red-500 bg-red-50 font-medium'
-       : 'text-gray-700 hover:bg-gray-50'
-     }`
+      ? 'text-red-500 bg-red-50 font-medium'
+      : 'text-gray-700 hover:bg-gray-50'
+    }`
 
   // ── Ripple effect khi click ──
   const handleRipple = (e) => {
@@ -217,6 +217,19 @@ export default function Navbar() {
                       >
                         <i className="fa-solid fa-box w-4"></i>Đơn hàng của tôi
                       </Link>
+
+                      <Link
+                        to="/warranty"
+                        onClick={() => setUserDropdown(false)}
+                        className={`flex items-center gap-2 px-4 py-2 text-sm transition-colors${isActive('/warranty')
+                          ? 'text-red-500 bg-red-50'
+                          : 'text-gray-600 hover:bg-gray-50 hover:text-red-500'
+                          }`}
+                      >
+                        <i className="fa-solid fa-shield-halved w-4"></i>
+                        Tra cứu bảo hành
+                      </Link>
+
                       <Link
                         to="/profile"
                         onClick={() => setUserDropdown(false)}
@@ -310,6 +323,21 @@ export default function Navbar() {
                     <i className={`fa-solid fa-box w-4 ${isActive('/orders') ? 'text-red-400' : 'text-gray-400'}`}></i>
                     Đơn hàng của tôi
                     {isActive('/orders') && <span className="ml-auto w-1.5 h-1.5 rounded-full bg-red-500" />}
+                  </Link>
+
+                  <Link
+                    to="/warranty"
+                    className={mobileNavClass('/warranty')}
+                    onClick={handleRipple}
+                  >
+                    <i
+                      className={`fa-solid fa-shield-halved w-4 ${isActive('/warranty') ? 'text-red-400' : 'text-gray-400'
+                        }`}
+                    ></i>
+                    Tra cứu bảo hành
+                    {isActive('/warranty') && (
+                      <span className="ml-auto w-1.5 h-1.5 rounded-full bg-red-500" />
+                    )}
                   </Link>
 
                   {isAdmin() && (

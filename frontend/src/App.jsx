@@ -17,6 +17,7 @@ import RegisterPage from './pages/RegisterPage'
 import NotFoundPage from './pages/NotFoundPage'
 import PaymentResultPage from './pages/PaymentResultPage'
 import ProfilePage from './pages/ProfilePage'
+import WarrantyPage from './pages/WarrantyPage'
 
 import DashboardPage from './pages/admin/DashboardPage'
 import ProductsAdminPage from './pages/admin/ProductsAdminPage'
@@ -25,6 +26,7 @@ import UsersAdminPage from './pages/admin/UsersAdminPage'
 import WarrantyAdminPage from './pages/admin/WarrantyAdminPage'
 import PromotionsAdminPage from './pages/admin/PromotionsAdminPage'
 import InventoryAdminPage from './pages/admin/InventoryAdminPage'
+import ReturnsAdminPage from './pages/admin/ReturnsAdminPage'   // ← MỚI
 
 
 function PrivateRoute({ children }) {
@@ -36,20 +38,11 @@ function PrivateRoute({ children }) {
 
 function AdminRoute({ children }) {
   const isAuthenticated = useAuthStore(s => s.isAuthenticated)
-  const user = useAuthStore(s => s.user)
+  const role = useAuthStore(s => s.user?.role)
   const location = useLocation()
 
   if (!isAuthenticated) return <Navigate to="/login" state={{ from: location }} replace />
-
-  const storedUser = (() => {
-    try {
-      const raw = localStorage.getItem('auth-store')
-      if (raw) return JSON.parse(raw)?.state?.user
-    } catch { }
-    return null
-  })()
-
-  if ((user || storedUser)?.role !== 'ADMIN') return <Navigate to="/" replace />
+  if (role !== 'ADMIN') return <Navigate to="/" replace />
   return children
 }
 
@@ -70,6 +63,7 @@ export default function App() {
         <Route path="*" element={<NotFoundPage />} />
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/payment/result" element={<PaymentResultPage />} />
+        <Route path="/warranty/:code?" element={<WarrantyPage />} />
       </Route>
 
       <Route element={<AdminRoute><AdminLayout /></AdminRoute>}>
@@ -80,6 +74,7 @@ export default function App() {
         <Route path="/admin/warranty" element={<WarrantyAdminPage />} />
         <Route path="/admin/promotions" element={<PromotionsAdminPage />} />
         <Route path="/admin/inventory" element={<InventoryAdminPage />} />
+        <Route path="/admin/returns" element={<ReturnsAdminPage />} />  {/* ← MỚI */}
       </Route>
     </Routes>
   )
