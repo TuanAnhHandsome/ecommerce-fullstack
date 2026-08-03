@@ -85,7 +85,7 @@ function WarrantyDetailModal({ item, onClose, onUpdate }) {
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
           <div>
-            <p className="text-xs text-gray-400 uppercase tracking-wide mb-0.5">Yêu cầu bảo hành / hậu mãi</p>
+            <p className="text-xs text-gray-400 uppercase tracking-wide mb-0.5">Yêu cầu bảo hành</p>
             <h2 className="text-lg font-bold text-gray-800 font-mono">{item.requestCode}</h2>
           </div>
           <div className="flex items-center gap-3">
@@ -316,7 +316,7 @@ export default function WarrantyAdminPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
             <i className="fa-solid fa-shield-halved text-indigo-500"></i>
-            Bảo hành & Hậu mãi
+            Bảo hành 
             {pendingCount > 0 && (
               <span className="text-sm bg-rose-500 text-white font-bold px-2 py-0.5 rounded-full">
                 {pendingCount} mới

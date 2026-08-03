@@ -189,10 +189,11 @@ export default function Navbar() {
                     onClick={() => setUserDropdown(!userDropdown)}
                     className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-50 transition-colors"
                   >
-                    <div className="w-7 h-7 bg-red-100 rounded-full flex items-center justify-center">
-                      <span className="text-red-600 font-bold text-xs">
-                        {user?.fullName?.charAt(0)?.toUpperCase()}
-                      </span>
+                    <div className="w-7 h-7 bg-red-100 rounded-full overflow-hidden flex items-center justify-center">
+                      {user?.avatarUrl
+                        ? <img src={user.avatarUrl} alt="avatar" className="w-full h-full object-cover" />
+                        : <span className="text-red-600 font-bold text-xs">{user?.fullName?.charAt(0)?.toUpperCase()}</span>
+                      }
                     </div>
                     <span className="text-sm text-gray-700 font-medium max-w-[100px] truncate">
                       {user?.fullName}
@@ -355,10 +356,11 @@ export default function Navbar() {
 
                   <div className="border-t border-gray-100 pt-2 mt-2">
                     <div className="flex items-center gap-3 px-3 py-2 mb-1">
-                      <div className="w-8 h-8 bg-red-100 rounded-full flex items-center justify-center">
-                        <span className="text-red-600 font-bold text-sm">
-                          {user?.fullName?.charAt(0)?.toUpperCase()}
-                        </span>
+                      <div className="w-8 h-8 bg-red-100 rounded-full overflow-hidden flex items-center justify-center">
+                        {user?.avatarUrl
+                          ? <img src={user.avatarUrl} alt="avatar" className="w-full h-full object-cover" />
+                          : <span className="text-red-600 font-bold text-sm">{user?.fullName?.charAt(0)?.toUpperCase()}</span>
+                        }
                       </div>
                       <div>
                         <p className="text-sm font-semibold text-gray-800">{user?.fullName}</p>

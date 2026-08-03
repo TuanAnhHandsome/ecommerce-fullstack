@@ -15,4 +15,5 @@ public class ProfileResponse {
     private String address;
     private String role;
     private LocalDateTime createdAt;
+    private String avatarUrl;
 }

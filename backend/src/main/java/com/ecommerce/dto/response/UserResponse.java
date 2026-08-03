@@ -13,4 +13,5 @@ public class UserResponse {
     private String role;
     private Boolean enabled;
     private LocalDateTime createdAt;
+    private String avatarUrl;
 }

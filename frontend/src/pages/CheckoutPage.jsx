@@ -414,9 +414,6 @@ export default function CheckoutPage() {
               <span>Tổng cộng</span>
               <span className="text-indigo-600">{fmt(finalAmount)}</span>
             </div>
-            <p className="text-xs text-gray-400 text-center">
-              * Giá cuối cùng được tính tại server
-            </p>
           </div>
 
           <p className="text-center text-xs text-gray-400 flex items-center justify-center gap-1">

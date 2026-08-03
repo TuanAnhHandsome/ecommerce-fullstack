@@ -148,6 +148,7 @@ public class AuthServiceImpl implements AuthService {
                 .address(user.getAddress())
                 .role(user.getRole().name())
                 .enabled(user.getEnabled())
+                .avatarUrl(user.getAvatarUrl())
                 .createdAt(user.getCreatedAt())
                 .build();
     }

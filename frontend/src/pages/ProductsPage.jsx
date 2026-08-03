@@ -266,25 +266,6 @@ const [maxFocused, setMaxFocused] = useState(false)
           ))}
         </div>
 
-        {/* Custom range */}
-        <p className="text-xs text-gray-400 mb-1.5">Hoặc nhập khoảng giá</p>
-        <div className="flex gap-1.5 items-center">
-          <input
-            type="text"
-            placeholder="Từ"
-            value={minInput ? fmt(minInput) : ''}
-            onChange={e => setMinInput(e.target.value.replace(/\D/g, ''))}
-            className="input text-sm py-1.5 px-2 w-0 flex-1"
-          />
-          <span className="text-gray-300 text-xs flex-shrink-0">—</span>
-          <input
-            type="text"
-            placeholder="Đến"
-            value={maxInput ? fmt(maxInput) : ''}
-            onChange={e => setMaxInput(e.target.value.replace(/\D/g, ''))}
-            className="input text-sm py-1.5 px-2 w-0 flex-1"
-          />
-        </div>
         {priceError && (
           <p className="text-xs text-red-500 mt-1">{priceError}</p>
         )}
@@ -294,14 +275,6 @@ const [maxFocused, setMaxFocused] = useState(false)
         >
           Áp dụng
         </button>
-        {(minPrice || maxPrice) && (
-          <button
-            onClick={() => { clearParam('minPrice', 'maxPrice'); setMobileSidebarOpen(false) }}
-            className="w-full text-xs text-gray-400 hover:text-red-400 mt-1.5 transition-colors"
-          >
-            Xóa lọc giá
-          </button>
-        )}
       </div>
 
       {/* Clear all */}

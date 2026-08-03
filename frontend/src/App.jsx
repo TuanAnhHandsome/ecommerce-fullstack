@@ -26,7 +26,8 @@ import UsersAdminPage from './pages/admin/UsersAdminPage'
 import WarrantyAdminPage from './pages/admin/WarrantyAdminPage'
 import PromotionsAdminPage from './pages/admin/PromotionsAdminPage'
 import InventoryAdminPage from './pages/admin/InventoryAdminPage'
-import ReturnsAdminPage from './pages/admin/ReturnsAdminPage'   // ← MỚI
+import ReturnsAdminPage from './pages/admin/ReturnsAdminPage'     
+import SettingsAdminPage from './pages/admin/SettingsAdminPage'   
 
 
 function PrivateRoute({ children }) {
@@ -40,7 +41,6 @@ function AdminRoute({ children }) {
   const isAuthenticated = useAuthStore(s => s.isAuthenticated)
   const role = useAuthStore(s => s.user?.role)
   const location = useLocation()
-
   if (!isAuthenticated) return <Navigate to="/login" state={{ from: location }} replace />
   if (role !== 'ADMIN') return <Navigate to="/" replace />
   return children
@@ -74,7 +74,8 @@ export default function App() {
         <Route path="/admin/warranty" element={<WarrantyAdminPage />} />
         <Route path="/admin/promotions" element={<PromotionsAdminPage />} />
         <Route path="/admin/inventory" element={<InventoryAdminPage />} />
-        <Route path="/admin/returns" element={<ReturnsAdminPage />} />  {/* ← MỚI */}
+        <Route path="/admin/returns" element={<ReturnsAdminPage />} />   {/* ← MỚI */}
+        <Route path="/admin/settings" element={<SettingsAdminPage />} /> {/* ← MỚI */}
       </Route>
     </Routes>
   )

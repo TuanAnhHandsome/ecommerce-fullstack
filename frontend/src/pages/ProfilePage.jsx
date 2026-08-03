@@ -4,6 +4,7 @@ import { userAPI } from '../services/api'
 import { useAuthStore } from '../store/authStore'
 import toast from 'react-hot-toast'
 import PasswordGateModal from '../components/common/PasswordGateModal'
+import AddressPickerModal from '../components/common/AddressPickerModal'
 
 export default function ProfilePage() {
   const navigate = useNavigate()
@@ -13,35 +14,66 @@ export default function ProfilePage() {
   const [profile, setProfile] = useState(null)
 
   // ── Password Gate ──────────────────────────────────────────────
-  // true  → chưa xác thực, hiển thị modal
-  // false → đã xác thực, hiển thị trang bình thường
   const [gated, setGated] = useState(true)
-
   const handleGateSuccess = () => setGated(false)
-  const handleGateCancel  = () => navigate(-1)   // quay lại trang trước
+  const handleGateCancel  = () => navigate(-1)
   // ──────────────────────────────────────────────────────────────
 
-  const [infoForm, setInfoForm] = useState({
-    fullName: '', phone: '', address: ''
-  })
-  const [pwForm, setPwForm] = useState({
-    currentPassword: '', newPassword: '', confirmPassword: ''
-  })
-  const [showPw, setShowPw] = useState({
-    currentPassword: false, newPassword: false, confirmPassword: false
-  })
+  // ── Address Picker ─────────────────────────────────────────────
+  const [showAddressPicker, setShowAddressPicker] = useState(false)
+  // ──────────────────────────────────────────────────────────────
+
+  const [infoForm, setInfoForm] = useState({ fullName: '', phone: '', address: '' })
+  const [pwForm,   setPwForm]   = useState({ currentPassword: '', newPassword: '', confirmPassword: '' })
+  const [showPw,   setShowPw]   = useState({ currentPassword: false, newPassword: false, confirmPassword: false })
+  const [confirmDelete, setConfirmDelete] = useState(false)
 
   useEffect(() => {
-    if (gated) return   // chưa xác thực → chưa cần tải dữ liệu
+    if (gated) return
     userAPI.getProfile().then(({ data }) => {
       setProfile(data.data)
       setInfoForm({
         fullName: data.data.fullName || '',
-        phone: data.data.phone || '',
-        address: data.data.address || '',
+        phone:    data.data.phone    || '',
+        address:  data.data.address  || '',
       })
     }).catch(() => toast.error('Không thể tải thông tin tài khoản'))
-  }, [gated])   // chạy lại khi gated chuyển sang false
+  }, [gated])
+
+  // ── Avatar ─────────────────────────────────────────────────────
+  const handleAvatarChange = async (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+    const formData = new FormData()
+    formData.append('file', file)
+    setLoading(true)
+    try {
+      const { data } = await userAPI.uploadAvatar(formData)
+      setProfile(data.data)
+      updateUser(data.data)
+      toast.success('Cập nhật ảnh đại diện thành công!')
+    } catch {
+      toast.error('Upload ảnh thất bại')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleAvatarDelete = async () => {
+    setLoading(true)
+    try {
+      const { data } = await userAPI.deleteAvatar()
+      setProfile(data.data)
+      updateUser(data.data)
+      toast.success('Đã xóa ảnh đại diện!')
+    } catch {
+      toast.error('Xóa ảnh thất bại')
+    } finally {
+      setLoading(false)
+      setConfirmDelete(false)
+    }
+  }
+  // ──────────────────────────────────────────────────────────────
 
   const handleUpdateInfo = async (e) => {
     e.preventDefault()
@@ -82,14 +114,14 @@ export default function ProfilePage() {
   ]
 
   const pwFields = [
-    { key: 'currentPassword', label: 'Mật khẩu hiện tại'     },
-    { key: 'newPassword',     label: 'Mật khẩu mới'           },
-    { key: 'confirmPassword', label: 'Xác nhận mật khẩu mới' },
+    { key: 'currentPassword', label: 'Mật khẩu hiện tại'       },
+    { key: 'newPassword',     label: 'Mật khẩu mới'             },
+    { key: 'confirmPassword', label: 'Xác nhận mật khẩu mới'   },
   ]
 
   return (
     <>
-      {/* Modal xác thực — hiện đè lên mọi thứ khi gated = true */}
+      {/* ── Modals ─────────────────────────────────────────── */}
       {gated && (
         <PasswordGateModal
           onSuccess={handleGateSuccess}
@@ -97,7 +129,18 @@ export default function ProfilePage() {
         />
       )}
 
-      {/* Nội dung trang — luôn render nhưng bị modal che khi chưa xác thực */}
+      {showAddressPicker && (
+        <AddressPickerModal
+          initialValue={infoForm.address}
+          onConfirm={(address) => {
+            setInfoForm(prev => ({ ...prev, address }))
+            setShowAddressPicker(false)
+          }}
+          onCancel={() => setShowAddressPicker(false)}
+        />
+      )}
+      {/* ───────────────────────────────────────────────────── */}
+
       <div className="max-w-3xl mx-auto px-4 py-8">
         <h1 className="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-2">
           <i className="fa-solid fa-circle-user text-red-500"></i>
@@ -106,9 +149,32 @@ export default function ProfilePage() {
 
         {/* Avatar card */}
         <div className="card p-6 mb-6 flex items-center gap-4">
-          <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center text-2xl font-bold text-red-500 flex-shrink-0">
-            {profile?.fullName?.[0]?.toUpperCase() || '?'}
-          </div>
+          <label className="relative cursor-pointer group flex-shrink-0">
+            <div className="w-16 h-16 rounded-full overflow-hidden bg-red-100 flex items-center justify-center text-2xl font-bold text-red-500">
+              {profile?.avatarUrl
+                ? <img src={profile.avatarUrl} alt="avatar" className="w-full h-full object-cover" />
+                : profile?.fullName?.[0]?.toUpperCase() || '?'
+              }
+            </div>
+            <div className="absolute inset-0 rounded-full bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+              <label className="cursor-pointer text-white hover:text-yellow-300 transition-colors" title="Đổi ảnh">
+                <i className="fa-solid fa-camera text-sm"></i>
+                <input type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} disabled={loading} />
+              </label>
+              {profile?.avatarUrl && (
+                <button
+                  type="button"
+                  onClick={() => setConfirmDelete(true)}
+                  disabled={loading}
+                  className="text-white hover:text-red-400 transition-colors"
+                  title="Xóa ảnh"
+                >
+                  <i className="fa-solid fa-trash text-sm"></i>
+                </button>
+              )}
+            </div>
+          </label>
+
           <div>
             <p className="font-bold text-gray-800 text-lg">{profile?.fullName || '...'}</p>
             <p className="text-gray-400 text-sm mb-1">{profile?.email}</p>
@@ -141,6 +207,7 @@ export default function ProfilePage() {
           <form onSubmit={handleUpdateInfo} className="card p-6 space-y-4">
             <h2 className="font-bold text-gray-700 mb-2">Cập nhật thông tin cá nhân</h2>
 
+            {/* Họ tên */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 <i className="fa-solid fa-user mr-1 text-gray-400"></i>Họ tên
@@ -152,6 +219,7 @@ export default function ProfilePage() {
               />
             </div>
 
+            {/* Email (readonly) */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 <i className="fa-solid fa-envelope mr-1 text-gray-400"></i>Email
@@ -160,6 +228,7 @@ export default function ProfilePage() {
               <p className="text-xs text-gray-400 mt-1">Email không thể thay đổi</p>
             </div>
 
+            {/* Số điện thoại */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 <i className="fa-solid fa-phone mr-1 text-gray-400"></i>Số điện thoại
@@ -171,16 +240,36 @@ export default function ProfilePage() {
               />
             </div>
 
+            {/* Địa chỉ + nút chọn bản đồ */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 <i className="fa-solid fa-map-pin mr-1 text-gray-400"></i>Địa chỉ
               </label>
-              <textarea
-                rows={2}
-                className="input resize-none"
-                value={infoForm.address}
-                onChange={e => setInfoForm({ ...infoForm, address: e.target.value })}
-              />
+              <div className="flex gap-2 items-start">
+                <textarea
+                  rows={2}
+                  className="input resize-none flex-1"
+                  placeholder="Nhập địa chỉ hoặc chọn trên bản đồ..."
+                  value={infoForm.address}
+                  readOnly
+                  onChange={e => setInfoForm({ ...infoForm, address: e.target.value })}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowAddressPicker(true)}
+                  className="flex-shrink-0 h-[68px] px-3 rounded-xl border border-gray-200 hover:border-red-300 hover:bg-red-50 transition-colors text-gray-400 hover:text-red-500 flex flex-col items-center justify-center gap-1"
+                  title="Chọn trên bản đồ"
+                >
+                  <i className="fa-solid fa-map-location-dot text-lg"></i>
+                  <span className="text-[10px] font-medium">Bản đồ</span>
+                </button>
+              </div>
+              {infoForm.address && (
+                <p className="text-xs text-gray-400 mt-1 flex items-center gap-1">
+                  <i className="fa-solid fa-location-dot text-red-400"></i>
+                  {infoForm.address}
+                </p>
+              )}
             </div>
 
             <button type="submit" disabled={loading} className="btn-primary w-full py-3">
@@ -232,6 +321,36 @@ export default function ProfilePage() {
           </form>
         )}
       </div>
+
+      {/* ── Confirm xóa avatar ─────────────────────────────── */}
+      {confirmDelete && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl shadow-xl p-6 w-80 mx-4">
+            <div className="flex flex-col items-center text-center gap-3">
+              <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
+                <i className="fa-solid fa-trash text-red-500 text-lg"></i>
+              </div>
+              <h3 className="font-bold text-gray-800">Xóa ảnh đại diện?</h3>
+              <p className="text-sm text-gray-500">Ảnh đại diện của bạn sẽ bị xóa vĩnh viễn.</p>
+            </div>
+            <div className="flex gap-3 mt-5">
+              <button
+                onClick={() => setConfirmDelete(false)}
+                className="flex-1 py-2 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
+              >
+                Hủy
+              </button>
+              <button
+                onClick={handleAvatarDelete}
+                disabled={loading}
+                className="flex-1 py-2 rounded-xl bg-red-500 text-white text-sm font-medium hover:bg-red-600 transition-colors"
+              >
+                {loading ? <i className="fa-solid fa-spinner fa-spin"></i> : 'Xóa'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   )
 }

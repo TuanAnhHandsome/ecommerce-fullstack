@@ -10,6 +10,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+import org.springframework.http.MediaType;
 
 import java.util.Map;
 
@@ -42,7 +44,6 @@ public class UserProfileController {
         return ResponseEntity.ok(ApiResponse.success("Đổi mật khẩu thành công"));
     }
 
-    // ── THÊM ENDPOINT NÀY ───────────────────────────────────────
     @PostMapping("/verify-password")
     public ResponseEntity<ApiResponse> verifyPassword(
             Authentication auth,
@@ -51,5 +52,19 @@ public class UserProfileController {
         profileService.verifyPassword(auth.getName(), password);
         return ResponseEntity.ok(ApiResponse.success("Xác thực thành công"));
     }
+
     // ────────────────────────────────────────────────────────────
+    @PostMapping(value = "/avatar", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<ApiResponse> uploadAvatar(
+            Authentication auth,
+            @RequestParam("file") MultipartFile file) {
+        ProfileResponse updated = profileService.uploadAvatar(auth.getName(), file);
+        return ResponseEntity.ok(ApiResponse.success(updated));
+    }
+
+    @DeleteMapping("/avatar")
+    public ResponseEntity<ApiResponse> deleteAvatar(Authentication auth) {
+        ProfileResponse updated = profileService.deleteAvatar(auth.getName());
+        return ResponseEntity.ok(ApiResponse.success(updated));
+    }
 }

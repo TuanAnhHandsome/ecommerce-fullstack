@@ -12,31 +12,40 @@ import java.util.Optional;
 
 public interface ReturnRepository extends JpaRepository<ReturnRequest, Long> {
 
-    /** Khách xem yêu cầu của mình */
-    Page<ReturnRequest> findByUserIdOrderByCreatedAtDesc(Long userId, Pageable pageable);
+        /** Khách xem yêu cầu của mình */
+        Page<ReturnRequest> findByUserIdOrderByCreatedAtDesc(Long userId, Pageable pageable);
 
-    /** Kiểm tra đã tạo return cho order này chưa */
-    boolean existsByOrderIdAndUserId(Long orderId, Long userId);
+        /** Kiểm tra đã tạo return cho order này chưa */
+        boolean existsByOrderIdAndUserId(Long orderId, Long userId);
 
-    /** Tìm theo returnCode — tra cứu */
-    Optional<ReturnRequest> findByReturnCode(String returnCode);
+        /** Tìm theo returnCode — tra cứu */
+        Optional<ReturnRequest> findByReturnCode(String returnCode);
 
-    /** Admin search: filter status + keyword */
-    @Query("""
-            SELECT r FROM ReturnRequest r
-            WHERE (:status  IS NULL OR r.status = :status)
-              AND (:keyword IS NULL OR :keyword = ''
-                   OR LOWER(r.returnCode)       LIKE LOWER(CONCAT('%',:keyword,'%'))
-                   OR LOWER(r.order.orderCode)  LIKE LOWER(CONCAT('%',:keyword,'%'))
-                   OR LOWER(r.user.email)       LIKE LOWER(CONCAT('%',:keyword,'%'))
-                   OR LOWER(r.user.fullName)    LIKE LOWER(CONCAT('%',:keyword,'%')))
-            ORDER BY r.createdAt DESC
-            """)
-    Page<ReturnRequest> searchAdmin(
-            @Param("status")  ReturnStatus status,
-            @Param("keyword") String keyword,
-            Pageable pageable);
+        @Query("""
+                        SELECT r FROM ReturnRequest r
+                        JOIN FETCH r.user
+                        JOIN FETCH r.order
+                        LEFT JOIN FETCH r.returnItems
+                        WHERE r.id = :id
+                        """)
+        Optional<ReturnRequest> findByIdWithDetails(@Param("id") Long id);
 
-    /** Đếm theo status — dùng cho dashboard admin */
-    long countByStatus(ReturnStatus status);
+        /** Admin search: filter status + keyword */
+        @Query("""
+                        SELECT r FROM ReturnRequest r
+                        WHERE (:status  IS NULL OR r.status = :status)
+                          AND (:keyword IS NULL OR :keyword = ''
+                               OR LOWER(r.returnCode)       LIKE LOWER(CONCAT('%',:keyword,'%'))
+                               OR LOWER(r.order.orderCode)  LIKE LOWER(CONCAT('%',:keyword,'%'))
+                               OR LOWER(r.user.email)       LIKE LOWER(CONCAT('%',:keyword,'%'))
+                               OR LOWER(r.user.fullName)    LIKE LOWER(CONCAT('%',:keyword,'%')))
+                        ORDER BY r.createdAt DESC
+                        """)
+        Page<ReturnRequest> searchAdmin(
+                        @Param("status") ReturnStatus status,
+                        @Param("keyword") String keyword,
+                        Pageable pageable);
+
+        /** Đếm theo status — dùng cho dashboard admin */
+        long countByStatus(ReturnStatus status);
 }

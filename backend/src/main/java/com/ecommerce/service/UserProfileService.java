@@ -9,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
 
 @Slf4j
 @Service
@@ -17,6 +18,37 @@ public class UserProfileService {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final CloudinaryService cloudinaryService;
+
+    public ProfileResponse uploadAvatar(String email, MultipartFile file) {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        if (user.getAvatarUrl() != null) {
+            cloudinaryService.deleteImage(user.getAvatarUrl());
+        }
+
+        String url = cloudinaryService.uploadImage(file, "ecommerce/avatars");
+        user.setAvatarUrl(url);
+
+        User saved = userRepository.save(user);
+        log.info("Avatar updated for user: {}", email);
+        return mapToResponse(saved);
+    }
+
+    public ProfileResponse deleteAvatar(String email) {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        if (user.getAvatarUrl() != null) {
+            cloudinaryService.deleteImage(user.getAvatarUrl());
+            user.setAvatarUrl(null);
+            userRepository.save(user);
+        }
+
+        log.info("Avatar deleted for user: {}", email);
+        return mapToResponse(user);
+    }
 
     public ProfileResponse getProfile(String email) {
         User user = userRepository.findByEmail(email)
@@ -75,6 +107,7 @@ public class UserProfileService {
                 .phone(user.getPhone())
                 .address(user.getAddress())
                 .role(user.getRole().name())
+                .avatarUrl(user.getAvatarUrl())
                 .createdAt(user.getCreatedAt())
                 .build();
     }

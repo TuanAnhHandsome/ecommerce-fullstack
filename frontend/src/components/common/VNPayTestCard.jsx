@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 
 export default function VNPayTestCard() {
   const [expanded, setExpanded] = useState(true)
   const [copied, setCopied] = useState(null)
+  const cardRef = useRef(null)
 
   const copyToClipboard = (text, field) => {
     navigator.clipboard.writeText(text)
@@ -18,8 +19,18 @@ export default function VNPayTestCard() {
     { label: 'OTP', value: '123456', icon: 'fa-lock', highlight: true },
   ]
 
+  useEffect(() => {
+  const handleClickOutside = (e) => {
+    if (cardRef.current && !cardRef.current.contains(e.target)) {
+      setExpanded(false)
+    }
+  }
+  document.addEventListener('mousedown', handleClickOutside)
+  return () => document.removeEventListener('mousedown', handleClickOutside)
+}, [])
+
   return (
-    <div className="fixed bottom-6 right-6 z-50 font-mono">
+    <div ref={cardRef} className="fixed bottom-6 right-6 z-50 font-mono">
       {/* Card */}
       {expanded && (
         <div className="w-[340px] rounded-2xl overflow-hidden

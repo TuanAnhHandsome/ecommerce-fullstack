@@ -2,6 +2,7 @@ package com.ecommerce.service.impl;
 
 import com.ecommerce.entity.Order;
 import com.ecommerce.entity.ReturnRequest; // Thêm import mới
+import com.ecommerce.repository.ReturnRepository;
 import com.ecommerce.service.EmailService;
 import jakarta.mail.MessagingException;
 import jakarta.mail.internet.InternetAddress;
@@ -29,29 +30,27 @@ public class EmailServiceImpl implements EmailService {
 
     private static final String FROM_EMAIL = "noreply@ecommerce.com";
     private static final String FROM_NAME = "EShop";
-
+    private final ReturnRepository returnRepository;
     // ─────────────────────────────────────────────────────────────
     // CONSTANTS FOR RETURN REQUESTS
     // ─────────────────────────────────────────────────────────────
 
     private static final Map<String, String> STATUS_LABELS = Map.of(
-            "PENDING",    "Chờ duyệt",
-            "APPROVED",   "Đã duyệt",
-            "RECEIVED",   "Đã nhận hàng",
+            "PENDING", "Chờ duyệt",
+            "APPROVED", "Đã duyệt",
+            "RECEIVED", "Đã nhận hàng",
             "INSPECTING", "Đang kiểm tra",
-            "REFUNDING",  "Đang hoàn tiền",
-            "COMPLETED",  "Hoàn tất",
-            "REJECTED",   "Từ chối"
-    );
+            "REFUNDING", "Đang hoàn tiền",
+            "COMPLETED", "Hoàn tất",
+            "REJECTED", "Từ chối");
 
     private static final Map<String, String> REASON_LABELS = Map.of(
-            "WRONG_ITEM",       "Sai sản phẩm / màu / size",
-            "DEFECTIVE",        "Hàng lỗi / hư hỏng",
+            "WRONG_ITEM", "Sai sản phẩm / màu / size",
+            "DEFECTIVE", "Hàng lỗi / hư hỏng",
             "NOT_AS_DESCRIBED", "Không đúng mô tả",
-            "CHANGED_MIND",     "Đổi ý không muốn mua",
-            "MISSING_PARTS",    "Thiếu phụ kiện",
-            "OTHER",            "Lý do khác"
-    );
+            "CHANGED_MIND", "Đổi ý không muốn mua",
+            "MISSING_PARTS", "Thiếu phụ kiện",
+            "OTHER", "Lý do khác");
 
     // ─────────────────────────────────────────────────────────────
     // ORDER METHODS
@@ -77,6 +76,79 @@ public class EmailServiceImpl implements EmailService {
 
     @Override
     @Async
+    public void sendReturnRequestConfirmation(ReturnRequest rr) {
+        // Fetch lại với JOIN FETCH để tránh LazyInitializationException
+        ReturnRequest fresh = returnRepository.findByIdWithDetails(rr.getId())
+                .orElse(null);
+        if (fresh == null)
+            return;
+
+        try {
+            Context ctx = new Context();
+            ctx.setVariable("customerName", fresh.getUser().getFullName());
+            ctx.setVariable("returnCode", fresh.getReturnCode());
+            ctx.setVariable("orderCode", fresh.getOrder().getOrderCode());
+            ctx.setVariable("reasonLabel", REASON_LABELS.getOrDefault(
+                    fresh.getReason().name(), fresh.getReason().name()));
+            ctx.setVariable("description", fresh.getDescription());
+            ctx.setVariable("returnItems", fresh.getReturnItems());
+            ctx.setVariable("statusLabel", "Chờ duyệt");
+
+            String html = templateEngine.process("email/return-request-confirmation", ctx);
+            sendEmail(fresh.getUser().getEmail(),
+                    "Yêu cầu hoàn hàng #" + fresh.getReturnCode() + " đã được ghi nhận",
+                    html);
+
+            log.info("Return confirmation email sent to {} for {}",
+                    fresh.getUser().getEmail(), fresh.getReturnCode());
+        } catch (Exception e) {
+            log.error("Failed to send return confirmation email: {}", e.getMessage());
+        }
+    }
+
+    @Override
+    @Async
+    public void sendReturnStatusUpdate(ReturnRequest rr) {
+        boolean shouldNotify = switch (rr.getStatus()) {
+            case APPROVED, COMPLETED, REJECTED -> true;
+            default -> false;
+        };
+        if (!shouldNotify)
+            return;
+
+        // Fetch lại trong thread mới — tránh closed session
+        ReturnRequest fresh = returnRepository.findByIdWithDetails(rr.getId())
+                .orElse(null);
+        if (fresh == null)
+            return;
+
+        try {
+            Context ctx = new Context();
+            ctx.setVariable("customerName", fresh.getUser().getFullName());
+            ctx.setVariable("returnCode", fresh.getReturnCode());
+            ctx.setVariable("orderCode", fresh.getOrder().getOrderCode());
+            ctx.setVariable("status", fresh.getStatus().name());
+            ctx.setVariable("statusLabel", STATUS_LABELS.getOrDefault(
+                    fresh.getStatus().name(), fresh.getStatus().name()));
+            ctx.setVariable("adminNote", fresh.getAdminNote());
+            ctx.setVariable("rejectReason", fresh.getRejectReason());
+            ctx.setVariable("refundAmount", fresh.getRefundAmount());
+            ctx.setVariable("refundMethod", fresh.getRefundMethod());
+
+            String html = templateEngine.process("email/return-status-update", ctx);
+            sendEmail(fresh.getUser().getEmail(),
+                    "Cập nhật yêu cầu hoàn hàng #" + fresh.getReturnCode(),
+                    html);
+
+            log.info("Return status update email sent to {} — status: {}",
+                    fresh.getUser().getEmail(), fresh.getStatus());
+        } catch (Exception e) {
+            log.error("Failed to send return status update email: {}", e.getMessage());
+        }
+    }
+
+    @Override
+    @Async
     public void sendOrderStatusUpdate(Order order) {
         try {
             Context ctx = buildBaseContext(order);
@@ -97,75 +169,6 @@ public class EmailServiceImpl implements EmailService {
                     order.getOrderCode(), e.getMessage());
         }
     }
-
-    // ─────────────────────────────────────────────────────────────
-    // RETURN REQUEST METHODS (NEW)
-    // ─────────────────────────────────────────────────────────────
-
-    @Override
-    @Async
-    public void sendReturnRequestConfirmation(ReturnRequest rr) {
-        try {
-            Context ctx = new Context();
-            ctx.setVariable("customerName", rr.getUser().getFullName());
-            ctx.setVariable("returnCode", rr.getReturnCode());
-            ctx.setVariable("orderCode", rr.getOrder().getOrderCode());
-            ctx.setVariable("reasonLabel", REASON_LABELS.getOrDefault(
-                    rr.getReason().name(), rr.getReason().name()));
-            ctx.setVariable("description", rr.getDescription());
-            ctx.setVariable("returnItems", rr.getReturnItems());
-            ctx.setVariable("statusLabel", "Chờ duyệt");
-
-            String html = templateEngine.process("email/return-request-confirmation", ctx);
-            sendEmail(rr.getUser().getEmail(), 
-                      "Yêu cầu hoàn hàng #" + rr.getReturnCode() + " đã được ghi nhận", 
-                      html);
-
-            log.info("Return confirmation email sent to {} for {}", 
-                     rr.getUser().getEmail(), rr.getReturnCode());
-        } catch (Exception e) {
-            log.error("Failed to send return confirmation email: {}", e.getMessage());
-        }
-    }
-
-    @Override
-    @Async
-    public void sendReturnStatusUpdate(ReturnRequest rr) {
-        // Chỉ gửi email cho các trạng thái quan trọng
-        boolean shouldNotify = switch (rr.getStatus()) {
-            case APPROVED, COMPLETED, REJECTED -> true;
-            default -> false;
-        };
-        if (!shouldNotify) return;
-
-        try {
-            Context ctx = new Context();
-            ctx.setVariable("customerName", rr.getUser().getFullName());
-            ctx.setVariable("returnCode", rr.getReturnCode());
-            ctx.setVariable("orderCode", rr.getOrder().getOrderCode());
-            ctx.setVariable("status", rr.getStatus().name());
-            ctx.setVariable("statusLabel", STATUS_LABELS.getOrDefault(
-                    rr.getStatus().name(), rr.getStatus().name()));
-            ctx.setVariable("adminNote", rr.getAdminNote());
-            ctx.setVariable("rejectReason", rr.getRejectReason());
-            ctx.setVariable("refundAmount", rr.getRefundAmount());
-            ctx.setVariable("refundMethod", rr.getRefundMethod());
-
-            String html = templateEngine.process("email/return-status-update", ctx);
-            sendEmail(rr.getUser().getEmail(), 
-                      "Cập nhật yêu cầu hoàn hàng #" + rr.getReturnCode(), 
-                      html);
-
-            log.info("Return status update email sent to {} — status: {}",
-                     rr.getUser().getEmail(), rr.getStatus());
-        } catch (Exception e) {
-            log.error("Failed to send return status update email: {}", e.getMessage());
-        }
-    }
-
-    // ─────────────────────────────────────────────────────────────
-    // OTP METHOD
-    // ─────────────────────────────────────────────────────────────
 
     @Override
     @Async
@@ -274,37 +277,37 @@ public class EmailServiceImpl implements EmailService {
 
     private String getStatusLabel(String status) {
         return switch (status) {
-            case "PENDING"          -> "Chờ xử lý";
+            case "PENDING" -> "Chờ xử lý";
             case "AWAITING_PAYMENT" -> "Chờ thanh toán";
-            case "PAID"             -> "Đã thanh toán";
-            case "PROCESSING"       -> "Đang xử lý";
-            case "SHIPPED"          -> "Đang giao hàng";
-            case "DELIVERED"        -> "Đã giao hàng";
-            case "CANCELLED"        -> "Đã hủy";
-            case "REFUNDED"         -> "Đã hoàn tiền";
-            default                 -> status;
+            case "PAID" -> "Đã thanh toán";
+            case "PROCESSING" -> "Đang xử lý";
+            case "SHIPPED" -> "Đang giao hàng";
+            case "DELIVERED" -> "Đã giao hàng";
+            case "CANCELLED" -> "Đã hủy";
+            case "REFUNDED" -> "Đã hoàn tiền";
+            default -> status;
         };
     }
 
     private String getStatusMessage(String status) {
         return switch (status) {
-            case "PAID"       -> "Thanh toán thành công! Đơn hàng đang được xử lý.";
+            case "PAID" -> "Thanh toán thành công! Đơn hàng đang được xử lý.";
             case "PROCESSING" -> "Đơn hàng đang được xử lý. Chúng tôi sẽ sớm giao hàng.";
-            case "SHIPPED"    -> "Đơn hàng đang trên đường giao đến bạn. Vui lòng để ý điện thoại!";
-            case "DELIVERED"  -> "Đơn hàng đã giao thành công. Cảm ơn bạn đã mua hàng! 🎉";
-            case "CANCELLED"  -> "Đơn hàng đã bị hủy. Nếu bạn có thắc mắc, vui lòng liên hệ hỗ trợ.";
-            case "REFUNDED"   -> "Hoàn tiền đã được xử lý. Vui lòng kiểm tra tài khoản trong 3-5 ngày làm việc.";
-            default           -> "Trạng thái đơn hàng đã được cập nhật.";
+            case "SHIPPED" -> "Đơn hàng đang trên đường giao đến bạn. Vui lòng để ý điện thoại!";
+            case "DELIVERED" -> "Đơn hàng đã giao thành công. Cảm ơn bạn đã mua hàng! 🎉";
+            case "CANCELLED" -> "Đơn hàng đã bị hủy. Nếu bạn có thắc mắc, vui lòng liên hệ hỗ trợ.";
+            case "REFUNDED" -> "Hoàn tiền đã được xử lý. Vui lòng kiểm tra tài khoản trong 3-5 ngày làm việc.";
+            default -> "Trạng thái đơn hàng đã được cập nhật.";
         };
     }
 
     private String getStatusColor(String status) {
         return switch (status) {
             case "PAID", "DELIVERED" -> "#16a34a";
-            case "SHIPPED"           -> "#2563eb";
-            case "CANCELLED"         -> "#dc2626";
-            case "REFUNDED"          -> "#9333ea";
-            default                  -> "#d97706";
+            case "SHIPPED" -> "#2563eb";
+            case "CANCELLED" -> "#dc2626";
+            case "REFUNDED" -> "#9333ea";
+            default -> "#d97706";
         };
     }
 }

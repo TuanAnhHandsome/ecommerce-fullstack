@@ -13,10 +13,11 @@ const STATUS_CONFIG = {
 }
 
 const REASON_LABELS = {
-  DAMAGED:          'Hàng bị hỏng/lỗi',
-  WRONG_ITEM:       'Giao sai hàng',
+  WRONG_ITEM:       'Sai sản phẩm / màu / size',
+  DEFECTIVE:        'Hàng lỗi / hư hỏng', // Đổi từ DAMAGED thành DEFECTIVE
   NOT_AS_DESCRIBED: 'Không đúng mô tả',
-  CHANGED_MIND:     'Đổi ý',
+  CHANGED_MIND:     'Đổi ý không muốn mua',
+  MISSING_PARTS:    'Thiếu phụ kiện',    // Thêm cho đủ bộ
   OTHER:            'Lý do khác',
 }
 
