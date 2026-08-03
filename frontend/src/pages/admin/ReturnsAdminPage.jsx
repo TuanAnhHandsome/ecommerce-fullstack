@@ -5,35 +5,36 @@ import toast from 'react-hot-toast'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const STATUS_CONFIG = {
-  PENDING:   { label: 'Chờ duyệt',    color: 'bg-amber-100 text-amber-700',   icon: 'fa-clock',         dot: 'bg-amber-400' },
-  APPROVED:  { label: 'Đã duyệt',     color: 'bg-blue-100 text-blue-700',     icon: 'fa-thumbs-up',     dot: 'bg-blue-400'  },
-  REJECTED:  { label: 'Từ chối',      color: 'bg-rose-100 text-rose-600',     icon: 'fa-thumbs-down',   dot: 'bg-rose-400'  },
-  COMPLETED: { label: 'Hoàn thành',   color: 'bg-emerald-100 text-emerald-700', icon: 'fa-circle-check', dot: 'bg-emerald-400' },
-  REFUNDED:  { label: 'Đã hoàn tiền', color: 'bg-violet-100 text-violet-700', icon: 'fa-rotate-left',   dot: 'bg-violet-400' },
+  PENDING:   { label: 'Chờ duyệt',    color: 'bg-amber-100 text-amber-700',     icon: 'fa-clock',         dot: 'bg-amber-400'   },
+  APPROVED:  { label: 'Đã duyệt',     color: 'bg-blue-100 text-blue-700',       icon: 'fa-thumbs-up',     dot: 'bg-blue-400'    },
+  REJECTED:  { label: 'Từ chối',      color: 'bg-rose-100 text-rose-600',       icon: 'fa-thumbs-down',   dot: 'bg-rose-400'    },
+  COMPLETED: { label: 'Hoàn thành',   color: 'bg-emerald-100 text-emerald-700', icon: 'fa-circle-check',  dot: 'bg-emerald-400' },
+  REFUNDED:  { label: 'Đã hoàn tiền', color: 'bg-violet-100 text-violet-700',   icon: 'fa-rotate-left',   dot: 'bg-violet-400'  },
 }
 
 const REASON_LABELS = {
   WRONG_ITEM:       'Sai sản phẩm / màu / size',
-  DEFECTIVE:        'Hàng lỗi / hư hỏng', // Đổi từ DAMAGED thành DEFECTIVE
+  DEFECTIVE:        'Hàng lỗi / hư hỏng',
   NOT_AS_DESCRIBED: 'Không đúng mô tả',
   CHANGED_MIND:     'Đổi ý không muốn mua',
-  MISSING_PARTS:    'Thiếu phụ kiện',    // Thêm cho đủ bộ
+  MISSING_PARTS:    'Thiếu phụ kiện',
   OTHER:            'Lý do khác',
 }
 
 const TABS = [
-  { key: 'ALL',       label: 'Tất cả' },
-  { key: 'PENDING',   label: 'Chờ duyệt' },
-  { key: 'APPROVED',  label: 'Đã duyệt' },
-  { key: 'REJECTED',  label: 'Từ chối' },
-  { key: 'COMPLETED', label: 'Hoàn thành' },
+  { key: 'ALL',       label: 'Tất cả'       },
+  { key: 'PENDING',   label: 'Chờ duyệt'    },
+  { key: 'APPROVED',  label: 'Đã duyệt'     },
+  { key: 'REJECTED',  label: 'Từ chối'      },
+  { key: 'COMPLETED', label: 'Hoàn thành'   },
   { key: 'REFUNDED',  label: 'Đã hoàn tiền' },
 ]
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-const fmt = (p) => new Intl.NumberFormat('vi-VN').format(p) + 'đ'
+const fmt     = (p) => new Intl.NumberFormat('vi-VN').format(p) + 'đ'
 const fmtDate = (d) => new Date(d).toLocaleString('vi-VN', {
-  day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
+  day: '2-digit', month: '2-digit', year: 'numeric',
+  hour: '2-digit', minute: '2-digit',
 })
 
 // ── Status Badge ──────────────────────────────────────────────────────────────
@@ -50,30 +51,59 @@ function StatusBadge({ status, size = 'sm' }) {
 
 // ── Detail Modal ──────────────────────────────────────────────────────────────
 function ReturnDetailModal({ req, onClose, onUpdate }) {
-  const [updating, setUpdating] = useState(false)
-  const [adminNote, setAdminNote] = useState(req.adminNote || '')
-  const [refundAmount, setRefundAmount] = useState(req.refundAmount || req.totalRefundAmount || '')
-  const [action, setAction] = useState(null) // 'APPROVED' | 'REJECTED' | 'COMPLETED' | 'REFUNDED'
+  const [updating,      setUpdating]      = useState(false)
+  const [adminNote,     setAdminNote]     = useState(req.adminNote     || '')
+  const [rejectReason,  setRejectReason]  = useState(req.rejectReason  || '')
+  const [refundAmount,  setRefundAmount]  = useState(req.refundAmount  ?? req.totalRefundAmount ?? '')
+  const [action,        setAction]        = useState(null)
+  const [rejectError,   setRejectError]   = useState('')
+  const [amountError,   setAmountError]   = useState('')
+
+  const canApprove  = req.status === 'PENDING'
+  const canReject   = req.status === 'PENDING'
+  const canComplete = req.status === 'APPROVED'
+  const canRefund   = req.status === 'APPROVED' || req.status === 'COMPLETED'
+
+  const selectAction = (a) => {
+    setAction(prev => prev === a ? null : a)
+    setRejectError('')
+    setAmountError('')
+  }
 
   const handleSubmit = async () => {
     if (!action) return
+
+    // REJECTED: bắt buộc rejectReason (field backend kiểm tra)
+    if (action === 'REJECTED' && !rejectReason.trim()) {
+      setRejectError('Vui lòng nhập lý do từ chối để thông báo cho khách hàng')
+      return
+    }
+
+    // REFUNDED / COMPLETED: bắt buộc refundAmount > 0
+    if ((action === 'REFUNDED' || action === 'COMPLETED')) {
+      const amt = Number(refundAmount)
+      if (!refundAmount || isNaN(amt) || amt <= 0) {
+        setAmountError('Vui lòng nhập số tiền hoàn hợp lệ')
+        return
+      }
+    }
+
     setUpdating(true)
     try {
       await onUpdate(req.id, {
-        status: action,
-        adminNote: adminNote || undefined,
-        refundAmount: (action === 'REFUNDED' || action === 'COMPLETED') ? Number(refundAmount) : undefined,
+        status:       action,
+        // rejectReason gửi riêng — backend validate field này khi REJECTED
+        rejectReason: action === 'REJECTED' ? rejectReason.trim() : undefined,
+        // adminNote là ghi chú nội bộ, tuỳ chọn
+        adminNote:    adminNote.trim() || undefined,
+        refundAmount: (action === 'REFUNDED' || action === 'COMPLETED')
+                        ? Number(refundAmount) : undefined,
       })
       onClose()
     } finally {
       setUpdating(false)
     }
   }
-
-  const canApprove  = req.status === 'PENDING'
-  const canReject   = req.status === 'PENDING'
-  const canComplete = req.status === 'APPROVED'
-  const canRefund   = req.status === 'APPROVED' || req.status === 'COMPLETED'
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -87,7 +117,8 @@ function ReturnDetailModal({ req, onClose, onUpdate }) {
           </div>
           <div className="flex items-center gap-3">
             <StatusBadge status={req.status} size="md" />
-            <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-xl text-gray-400 transition-colors">
+            <button onClick={onClose}
+              className="p-2 hover:bg-gray-100 rounded-xl text-gray-400 transition-colors">
               <i className="fa-solid fa-xmark text-lg"></i>
             </button>
           </div>
@@ -131,7 +162,8 @@ function ReturnDetailModal({ req, onClose, onUpdate }) {
           {req.items?.length > 0 && (
             <div>
               <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">
-                <i className="fa-solid fa-box-open mr-1.5 text-indigo-400"></i>Sản phẩm hoàn ({req.items.length})
+                <i className="fa-solid fa-box-open mr-1.5 text-indigo-400"></i>
+                Sản phẩm hoàn ({req.items.length})
               </p>
               <div className="space-y-2">
                 {req.items.map((item, i) => (
@@ -168,8 +200,16 @@ function ReturnDetailModal({ req, onClose, onUpdate }) {
             </div>
           )}
 
-          {/* Ghi chú cũ của admin nếu có */}
-          {req.adminNote && req.status !== 'PENDING' && (
+          {/* Ghi chú / lý do từ chối cũ */}
+          {req.rejectReason && req.status === 'REJECTED' && (
+            <div className="bg-rose-50 border border-rose-100 rounded-xl p-4">
+              <p className="text-xs font-semibold text-rose-400 uppercase tracking-wide mb-1">
+                <i className="fa-solid fa-ban mr-1.5"></i>Lý do từ chối
+              </p>
+              <p className="text-sm text-rose-700">{req.rejectReason}</p>
+            </div>
+          )}
+          {req.adminNote && (
             <div className="bg-gray-50 rounded-xl p-4">
               <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">
                 <i className="fa-solid fa-note-sticky mr-1.5 text-gray-300"></i>Ghi chú admin
@@ -185,71 +225,39 @@ function ReturnDetailModal({ req, onClose, onUpdate }) {
                 <i className="fa-solid fa-sliders mr-1.5 text-indigo-400"></i>Xử lý yêu cầu
               </p>
 
-              {/* Ghi chú */}
-              <div>
-                <label className="text-xs text-gray-500 font-medium mb-1.5 block">Ghi chú (tuỳ chọn)</label>
-                <textarea
-                  value={adminNote}
-                  onChange={e => setAdminNote(e.target.value)}
-                  rows={2}
-                  placeholder="Nhập ghi chú xử lý..."
-                  className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 outline-none
-                    focus:ring-2 focus:ring-indigo-200 focus:border-indigo-300 resize-none transition"
-                />
-              </div>
-
-              {/* Số tiền hoàn — chỉ khi duyệt / hoàn tiền */}
-              {(action === 'REFUNDED' || action === 'COMPLETED') && (
-                <div>
-                  <label className="text-xs text-gray-500 font-medium mb-1.5 block">Số tiền hoàn thực tế</label>
-                  <input
-                    type="number"
-                    value={refundAmount}
-                    onChange={e => setRefundAmount(e.target.value)}
-                    placeholder={req.totalRefundAmount || 0}
-                    className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 outline-none
-                      focus:ring-2 focus:ring-indigo-200 focus:border-indigo-300 transition"
-                  />
-                </div>
-              )}
-
-              {/* Nút hành động */}
+              {/* Nút chọn action */}
               <div className="flex flex-wrap gap-2">
                 {canApprove && (
-                  <button
-                    onClick={() => setAction(a => a === 'APPROVED' ? null : 'APPROVED')}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold
-                      transition-all ${action === 'APPROVED'
+                  <button onClick={() => selectAction('APPROVED')}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all
+                      ${action === 'APPROVED'
                         ? 'bg-blue-500 text-white shadow-md shadow-blue-200'
                         : 'bg-blue-50 text-blue-600 hover:bg-blue-100'}`}>
                     <i className="fa-solid fa-thumbs-up"></i>Duyệt yêu cầu
                   </button>
                 )}
                 {canReject && (
-                  <button
-                    onClick={() => setAction(a => a === 'REJECTED' ? null : 'REJECTED')}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold
-                      transition-all ${action === 'REJECTED'
+                  <button onClick={() => selectAction('REJECTED')}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all
+                      ${action === 'REJECTED'
                         ? 'bg-rose-500 text-white shadow-md shadow-rose-200'
                         : 'bg-rose-50 text-rose-600 hover:bg-rose-100'}`}>
                     <i className="fa-solid fa-thumbs-down"></i>Từ chối
                   </button>
                 )}
                 {canComplete && (
-                  <button
-                    onClick={() => setAction(a => a === 'COMPLETED' ? null : 'COMPLETED')}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold
-                      transition-all ${action === 'COMPLETED'
+                  <button onClick={() => selectAction('COMPLETED')}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all
+                      ${action === 'COMPLETED'
                         ? 'bg-emerald-500 text-white shadow-md shadow-emerald-200'
                         : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100'}`}>
                     <i className="fa-solid fa-box-open"></i>Đã nhận hàng
                   </button>
                 )}
                 {canRefund && (
-                  <button
-                    onClick={() => setAction(a => a === 'REFUNDED' ? null : 'REFUNDED')}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold
-                      transition-all ${action === 'REFUNDED'
+                  <button onClick={() => selectAction('REFUNDED')}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all
+                      ${action === 'REFUNDED'
                         ? 'bg-violet-500 text-white shadow-md shadow-violet-200'
                         : 'bg-violet-50 text-violet-600 hover:bg-violet-100'}`}>
                     <i className="fa-solid fa-rotate-left"></i>Đã hoàn tiền
@@ -257,18 +265,85 @@ function ReturnDetailModal({ req, onClose, onUpdate }) {
                 )}
               </div>
 
-              {/* Confirm button */}
+              {/* Form theo action */}
               {action && (
-                <button
-                  onClick={handleSubmit}
-                  disabled={updating}
-                  className="w-full py-2.5 bg-indigo-500 hover:bg-indigo-600 disabled:opacity-60
-                    text-white text-sm font-bold rounded-xl transition-colors flex items-center
-                    justify-center gap-2">
-                  {updating
-                    ? <><i className="fa-solid fa-spinner fa-spin"></i>Đang xử lý...</>
-                    : <><i className="fa-solid fa-check"></i>Xác nhận cập nhật</>}
-                </button>
+                <div className="space-y-3 pt-1">
+
+                  {/* Lý do từ chối — chỉ khi REJECTED, bắt buộc */}
+                  {action === 'REJECTED' && (
+                    <div>
+                      <label className="text-xs text-gray-500 font-medium mb-1.5 block">
+                        Lý do từ chối <span className="text-rose-500">*</span>
+                        <span className="text-gray-400 font-normal ml-1">(gửi đến khách hàng)</span>
+                      </label>
+                      <textarea
+                        value={rejectReason}
+                        onChange={e => { setRejectReason(e.target.value); setRejectError('') }}
+                        rows={2}
+                        placeholder="Ví dụ: Sản phẩm không đủ điều kiện hoàn hàng do..."
+                        className={`w-full text-sm border rounded-xl px-3 py-2 outline-none resize-none transition
+                          focus:ring-2 focus:ring-rose-200 focus:border-rose-300
+                          ${rejectError ? 'border-rose-300 bg-rose-50' : 'border-gray-200'}`}
+                      />
+                      {rejectError && (
+                        <p className="text-xs text-rose-500 mt-1 flex items-center gap-1">
+                          <i className="fa-solid fa-circle-exclamation"></i>{rejectError}
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Số tiền hoàn — khi REFUNDED / COMPLETED, bắt buộc */}
+                  {(action === 'REFUNDED' || action === 'COMPLETED') && (
+                    <div>
+                      <label className="text-xs text-gray-500 font-medium mb-1.5 block">
+                        Số tiền hoàn thực tế <span className="text-rose-500">*</span>
+                      </label>
+                      <input
+                        type="number"
+                        value={refundAmount}
+                        onChange={e => { setRefundAmount(e.target.value); setAmountError('') }}
+                        placeholder={req.totalRefundAmount ?? 0}
+                        className={`w-full text-sm border rounded-xl px-3 py-2 outline-none transition
+                          focus:ring-2 focus:ring-indigo-200 focus:border-indigo-300
+                          ${amountError ? 'border-rose-300 bg-rose-50' : 'border-gray-200'}`}
+                      />
+                      {amountError && (
+                        <p className="text-xs text-rose-500 mt-1 flex items-center gap-1">
+                          <i className="fa-solid fa-circle-exclamation"></i>{amountError}
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Ghi chú nội bộ — luôn tuỳ chọn */}
+                  <div>
+                    <label className="text-xs text-gray-500 font-medium mb-1.5 block">
+                      Ghi chú nội bộ
+                      <span className="text-gray-400 font-normal ml-1">(tuỳ chọn, không gửi khách)</span>
+                    </label>
+                    <textarea
+                      value={adminNote}
+                      onChange={e => setAdminNote(e.target.value)}
+                      rows={2}
+                      placeholder="Ghi chú nội bộ cho team..."
+                      className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2
+                        outline-none resize-none transition focus:ring-2 focus:ring-indigo-200
+                        focus:border-indigo-300"
+                    />
+                  </div>
+
+                  {/* Confirm */}
+                  <button onClick={handleSubmit} disabled={updating}
+                    className="w-full py-2.5 bg-indigo-500 hover:bg-indigo-600 disabled:opacity-60
+                      text-white text-sm font-bold rounded-xl transition-colors flex items-center
+                      justify-center gap-2">
+                    {updating
+                      ? <><i className="fa-solid fa-spinner fa-spin"></i>Đang xử lý...</>
+                      : <><i className="fa-solid fa-check"></i>Xác nhận cập nhật</>
+                    }
+                  </button>
+                </div>
               )}
             </div>
           )}
@@ -280,10 +355,10 @@ function ReturnDetailModal({ req, onClose, onUpdate }) {
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function ReturnsAdminPage() {
-  const queryClient = useQueryClient()
-  const [page, setPage] = useState(0)
+  const queryClient                     = useQueryClient()
+  const [page, setPage]                 = useState(0)
   const [statusFilter, setStatusFilter] = useState('ALL')
-  const [selected, setSelected] = useState(null)
+  const [selected, setSelected]         = useState(null)
 
   const { data, isLoading } = useQuery({
     queryKey: ['admin-returns', page, statusFilter],
@@ -298,7 +373,6 @@ export default function ReturnsAdminPage() {
       await returnAPI.adminUpdate(id, payload)
       toast.success('Cập nhật yêu cầu thành công!')
       queryClient.invalidateQueries(['admin-returns'])
-      // refresh badge
       queryClient.invalidateQueries(['dashboard'])
     } catch (err) {
       toast.error(err.response?.data?.message || 'Không thể cập nhật')
@@ -307,9 +381,6 @@ export default function ReturnsAdminPage() {
   }
 
   const rows = data?.content || []
-
-  // Stats tính từ dữ liệu hiện có (hoặc có thể gọi API riêng)
-  const pendingCount = data?.totalElements != null && statusFilter === 'PENDING' ? data.totalElements : null
 
   return (
     <div className="p-6">
@@ -329,8 +400,7 @@ export default function ReturnsAdminPage() {
         {TABS.map(tab => {
           const cfg = tab.key !== 'ALL' ? STATUS_CONFIG[tab.key] : null
           return (
-            <button
-              key={tab.key}
+            <button key={tab.key}
               onClick={() => { setStatusFilter(tab.key); setPage(0) }}
               className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium
                 transition-all border ${statusFilter === tab.key
@@ -359,14 +429,14 @@ export default function ReturnsAdminPage() {
             <tbody className="divide-y divide-gray-50">
               {isLoading
                 ? [...Array(8)].map((_, i) => (
-                  <tr key={i} className="animate-pulse">
-                    {[...Array(8)].map((_, j) => (
-                      <td key={j} className="px-4 py-3">
-                        <div className="h-4 bg-gray-100 rounded w-full"></div>
-                      </td>
-                    ))}
-                  </tr>
-                ))
+                    <tr key={i} className="animate-pulse">
+                      {[...Array(8)].map((_, j) => (
+                        <td key={j} className="px-4 py-3">
+                          <div className="h-4 bg-gray-100 rounded w-full"></div>
+                        </td>
+                      ))}
+                    </tr>
+                  ))
                 : rows.length === 0
                   ? (
                     <tr>
@@ -380,28 +450,23 @@ export default function ReturnsAdminPage() {
                     <tr key={req.id}
                       className="hover:bg-gray-50 transition-colors cursor-pointer"
                       onClick={() => setSelected(req)}>
-
                       <td className="px-4 py-3">
                         <span className="text-xs font-mono font-semibold text-gray-500">#{req.id}</span>
                       </td>
-
                       <td className="px-4 py-3">
                         <p className="text-sm font-semibold text-gray-800">{req.userName}</p>
                         <p className="text-xs text-gray-400">{req.userEmail}</p>
                       </td>
-
                       <td className="px-4 py-3">
                         <span className="text-sm font-mono font-bold text-indigo-600">
                           {req.orderCode || `#${req.orderId}`}
                         </span>
                       </td>
-
                       <td className="px-4 py-3">
                         <span className="text-xs bg-amber-50 text-amber-700 px-2 py-1 rounded-full font-medium">
                           {REASON_LABELS[req.reason] || req.reason}
                         </span>
                       </td>
-
                       <td className="px-4 py-3">
                         <p className="text-sm font-bold text-indigo-600">
                           {req.totalRefundAmount != null ? fmt(req.totalRefundAmount) : '—'}
@@ -412,15 +477,12 @@ export default function ReturnsAdminPage() {
                           </p>
                         )}
                       </td>
-
                       <td className="px-4 py-3 text-xs text-gray-400 whitespace-nowrap">
                         {fmtDate(req.createdAt)}
                       </td>
-
                       <td className="px-4 py-3">
                         <StatusBadge status={req.status} />
                       </td>
-
                       <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                         <button onClick={() => setSelected(req)}
                           className="p-2 text-indigo-400 hover:bg-indigo-50 rounded-lg transition-colors">
@@ -428,7 +490,8 @@ export default function ReturnsAdminPage() {
                         </button>
                       </td>
                     </tr>
-                  ))}
+                  ))
+              }
             </tbody>
           </table>
         </div>
@@ -451,10 +514,11 @@ export default function ReturnsAdminPage() {
                 }
                 return (
                   <button key={pageNum} onClick={() => setPage(pageNum)}
-                    className={`w-8 h-8 rounded-lg text-sm font-medium transition-colors ${page === pageNum
-                      ? 'bg-indigo-500 text-white'
-                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                      }`}>
+                    className={`w-8 h-8 rounded-lg text-sm font-medium transition-colors ${
+                      page === pageNum
+                        ? 'bg-indigo-500 text-white'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}>
                     {pageNum + 1}
                   </button>
                 )

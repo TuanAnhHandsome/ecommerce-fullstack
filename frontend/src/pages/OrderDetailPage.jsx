@@ -1,6 +1,7 @@
 import { useParams }                          from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState }                              from 'react'
+import { useNavigate }                           from 'react-router-dom'
 import toast                                     from 'react-hot-toast'
 
 import { orderAPI, paymentAPI, reviewAPI }  from '../services/api'
@@ -47,6 +48,7 @@ function OrderNotFound() {
 // ── Main page ──────────────────────────────────────────────────────────────────
 export default function OrderDetailPage() {
   const { id }        = useParams()
+  const navigate      = useNavigate()
   const queryClient   = useQueryClient()
 
   // ── Modal / UI state ────────────────────────────────────────────────────────
@@ -81,7 +83,7 @@ export default function OrderDetailPage() {
     },
   })
 
-  // ── Retry VNPay payment ──────────────────────────────────────────────────────
+  // ── Retry VNPay payment (thanh toán ngay) ───────────────────────────────────
   const handleRetryPayment = async () => {
     setPayLoading(true)
     try {
@@ -92,6 +94,33 @@ export default function OrderDetailPage() {
     } finally {
       setPayLoading(false)
     }
+  }
+
+  // ── Back to checkout (chỉnh sửa trước khi thanh toán) ──────────────────────
+  const handleBackToCheckout = () => {
+    // Lấy danh sách cartItemId từ các orderItem để truyền sang CheckoutPage
+    const cartItemIds = order.orderItems?.map(item => item.cartItemId).filter(Boolean)
+
+    if (!cartItemIds?.length) {
+      // Nếu backend không trả cartItemId, fallback về giỏ hàng
+      toast('Vui lòng chọn lại sản phẩm từ giỏ hàng', { icon: 'ℹ️' })
+      navigate('/cart')
+      return
+    }
+
+    navigate('/checkout', {
+      state: {
+        cartItemIds,
+        // Truyền thêm thông tin giao hàng cũ để pre-fill form
+        prefill: {
+          shippingName:    order.shippingName,
+          shippingPhone:   order.shippingPhone,
+          shippingAddress: order.shippingAddress,
+          note:            order.note,
+          paymentGateway:  order.payment?.gateway || 'VNPAY',
+        },
+      },
+    })
   }
 
   // ── Render guards ────────────────────────────────────────────────────────────
@@ -123,6 +152,7 @@ export default function OrderDetailPage() {
         order={order}
         loading={payLoading}
         onRetry={handleRetryPayment}
+        onCheckout={handleBackToCheckout}
       />
 
       {/* 5. Nội dung chính */}

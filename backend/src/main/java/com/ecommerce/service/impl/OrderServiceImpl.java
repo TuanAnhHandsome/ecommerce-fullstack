@@ -14,6 +14,8 @@ import com.ecommerce.service.CouponService;
 import com.ecommerce.service.EmailService;
 import com.ecommerce.service.OrderService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,6 +24,8 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -223,7 +227,7 @@ public class OrderServiceImpl implements OrderService {
     @Transactional(readOnly = true)
     public PageResponse<OrderResponse> getMyOrders(String email, Pageable pageable) {
         User user = findUser(email);
-        return PageResponse.of(orderRepository.findByUser(user, pageable).map(this::toResponse));
+        return toPageResponse(orderRepository.findIdsByUser(user, pageable));
     }
 
     @Override
@@ -232,12 +236,36 @@ public class OrderServiceImpl implements OrderService {
         if (statusStr != null && !statusStr.isBlank()) {
             try {
                 OrderStatus status = OrderStatus.valueOf(statusStr.toUpperCase());
-                return PageResponse.of(orderRepository.findByStatus(status, pageable).map(this::toResponse));
+                return toPageResponse(orderRepository.findIdsByStatus(status, pageable));
             } catch (IllegalArgumentException e) {
                 throw new BusinessException("Trạng thái đơn hàng không hợp lệ: " + statusStr);
             }
         }
-        return PageResponse.of(orderRepository.findAll(pageable).map(this::toResponse));
+        return toPageResponse(orderRepository.findAllIds(pageable));
+    }
+
+    /**
+     * Nhận 1 trang gồm CHỈ order id (query nhẹ, giữ đúng phân trang/sắp xếp),
+     * rồi JOIN FETCH toàn bộ user + orderItems + payment cho đúng các id đó
+     * trong một query duy nhất — tránh N+1 (xem ghi chú trong OrderRepository).
+     */
+    private PageResponse<OrderResponse> toPageResponse(Page<Long> idPage) {
+        List<Long> ids = idPage.getContent();
+        if (ids.isEmpty()) {
+            return PageResponse.of(new PageImpl<OrderResponse>(List.of(), idPage.getPageable(), idPage.getTotalElements()));
+        }
+
+        Map<Long, Order> byId = orderRepository.findByIdInWithDetails(ids).stream()
+                .collect(Collectors.toMap(Order::getId, o -> o));
+
+        // Giữ đúng thứ tự phân trang ban đầu (idPage), không dựa vào thứ tự trả về của query IN
+        List<OrderResponse> content = ids.stream()
+                .map(byId::get)
+                .filter(Objects::nonNull)
+                .map(this::toResponse)
+                .toList();
+
+        return PageResponse.of(new PageImpl<>(content, idPage.getPageable(), idPage.getTotalElements()));
     }
 
     // ─────────────────────────────────────────────────────────────

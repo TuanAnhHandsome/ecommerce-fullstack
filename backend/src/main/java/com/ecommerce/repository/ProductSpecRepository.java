@@ -18,6 +18,14 @@ public interface ProductSpecRepository extends JpaRepository<ProductSpec, Long> 
         """)
     List<ProductSpec> findByProductIdOrdered(@Param("productId") Long productId);
 
+    /** Batch version — fix N+1 trong danh sách sản phẩm. */
+    @Query("""
+        SELECT s FROM ProductSpec s
+        WHERE s.product.id IN :productIds
+        ORDER BY s.product.id, s.specGroup, s.sortOrder
+        """)
+    List<ProductSpec> findByProductIdInOrdered(@Param("productIds") List<Long> productIds);
+
     /** Xóa toàn bộ spec của sản phẩm — dùng khi replace-all khi update */
     @Modifying
     @Query("DELETE FROM ProductSpec s WHERE s.product.id = :productId")

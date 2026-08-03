@@ -1,6 +1,19 @@
 import { Link } from 'react-router-dom'
 
+const STORAGE_KEY = 'eshop-settings'
+
+function loadSettings() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    return raw ? JSON.parse(raw) : {}
+  } catch {
+    return {}
+  }
+}
+
 export default function Footer() {
+  const s = loadSettings()
+
   return (
     <footer className="bg-gray-900 text-gray-400 mt-16">
       <div className="max-w-7xl mx-auto px-4 py-12">
@@ -10,20 +23,28 @@ export default function Footer() {
             <Link to="/" className="flex items-center gap-2 mb-6 group">
               <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center overflow-hidden border-2 border-gray-800 group-hover:border-red-500 transition-all">
                 <img
-                  src="/logo.jpg"
+                  src={s.logoUrl || '/logo.jpg'}
                   alt="EShop Logo"
                   className="w-full h-full object-cover"
                 />
               </div>
               <span className="text-white font-extrabold text-xl tracking-tight">
-                E<span className="text-red-500">Shop</span>
+                {s.name
+                  ? s.name
+                  : <>E<span className="text-red-500">Shop</span></>
+                }
               </span>
             </Link>
             <p className="text-sm leading-relaxed">
-              Mua sắm trực tuyến uy tín, giao hàng nhanh toàn quốc.
+              {s.tagline || 'Mua sắm trực tuyến uy tín, giao hàng nhanh toàn quốc.'}
             </p>
             <div className="flex gap-3 mt-4">
-              <a href="#" className="w-8 h-8 bg-gray-800 rounded-lg flex items-center justify-center hover:bg-red-500 transition-colors">
+              <a
+                href={s.facebook || '#'}
+                target={s.facebook ? '_blank' : undefined}
+                rel="noreferrer"
+                className="w-8 h-8 bg-gray-800 rounded-lg flex items-center justify-center hover:bg-red-500 transition-colors"
+              >
                 <i className="fa-brands fa-facebook-f text-sm"></i>
               </a>
               <a href="#" className="w-8 h-8 bg-gray-800 rounded-lg flex items-center justify-center hover:bg-red-500 transition-colors">
@@ -32,6 +53,17 @@ export default function Footer() {
               <a href="#" className="w-8 h-8 bg-gray-800 rounded-lg flex items-center justify-center hover:bg-red-500 transition-colors">
                 <i className="fa-brands fa-youtube text-sm"></i>
               </a>
+              {s.zalo && (
+                <a
+                  href={s.zalo.startsWith('http') ? s.zalo : `https://zalo.me/${s.zalo}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="w-8 h-8 bg-gray-800 rounded-lg flex items-center justify-center hover:bg-blue-500 transition-colors"
+                  title="Zalo"
+                >
+                  <i className="fa-solid fa-comment-dots text-sm"></i>
+                </a>
+              )}
             </div>
           </div>
 
@@ -73,15 +105,29 @@ export default function Footer() {
             <ul className="space-y-2 text-sm">
               <li className="flex items-center gap-2">
                 <i className="fa-solid fa-phone text-red-400 w-4"></i>
-                <span>1900 xxxx</span>
+                <span>{s.phone || '1900 xxxx'}</span>
               </li>
               <li className="flex items-center gap-2">
                 <i className="fa-solid fa-envelope text-red-400 w-4"></i>
-                <span>support@eshop.vn</span>
+                {s.email
+                  ? <a href={`mailto:${s.email}`} className="hover:text-white transition-colors">{s.email}</a>
+                  : <span>support@eshop.vn</span>
+                }
               </li>
+              {s.website && (
+                <li className="flex items-center gap-2">
+                  <i className="fa-solid fa-globe text-red-400 w-4"></i>
+                  <a href={s.website} target="_blank" rel="noreferrer"
+                    className="hover:text-white transition-colors truncate">
+                    {s.website.replace(/^https?:\/\//, '')}
+                  </a>
+                </li>
+              )}
               <li className="flex items-start gap-2">
                 <i className="fa-solid fa-location-dot text-red-400 w-4 mt-0.5"></i>
-                <span>123 Lê Lợi, Q1, TP.HCM</span>
+                <span>
+                  {[s.address, s.city].filter(Boolean).join(', ') || '123 Lê Lợi, Q1, TP.HCM'}
+                </span>
               </li>
             </ul>
 

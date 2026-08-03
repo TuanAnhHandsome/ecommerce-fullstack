@@ -12,6 +12,9 @@ public interface AuthService {
 
     AuthResponse refreshToken(String refreshToken);
 
+    /** Vô hiệu hoá refresh token (xoá bản ghi DB) — được gọi khi người dùng đăng xuất. */
+    void logout(String refreshToken);
+
     void sendOtp(String email);
 
     boolean verifyOtp(String email, String otp);

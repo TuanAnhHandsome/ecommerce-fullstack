@@ -6,7 +6,7 @@ import { useMemo } from 'react'
  * Trả về:
  *  - allImages      : toàn bộ ảnh gallery (ảnh chính + ảnh các biến thể, không trùng)
  *  - variantImgIndex: index trong allImages của ảnh biến thể đang chọn (-1 nếu chưa chọn)
- *  - bestVariant    : variant khớp nhất với selectedValues
+ *  - bestVariant    : variant khớp đủ tất cả selectedValues (không chấp nhận partial match)
  *  - currentPrice, originalPrice, salePrice, isOnSale, currentStock, discountPct
  */
 export function useProductVariant(product, selectedValues = {}) {
@@ -18,60 +18,79 @@ export function useProductVariant(product, selectedValues = {}) {
       currentPrice: product?.effectivePrice ?? product?.price ?? 0,
       originalPrice: product?.price ?? 0,
       salePrice: product?.salePrice ?? null,
-      isOnSale: !!product?.salePrice,
+      isOnSale: !!(product?.salePrice && product.salePrice < product.price),
       currentStock: product?.stockQty ?? 0,
-      discountPct: 0,
+      discountPct: product?.salePrice && product.salePrice < product.price
+        ? Math.round((1 - product.salePrice / product.price) * 100)
+        : 0,
     }
 
     if (!product?.variants?.length) return fallback
 
     const selectedEntries = Object.entries(selectedValues).filter(([, v]) => v)
 
-    // Tìm variant khớp nhiều nhất với selectedValues
+    // ── Bug 2 fix: chỉ chấp nhận variant khớp ĐỦ tất cả selectedValues ──────
+    // Partial match (khớp 1/2 thuộc tính) không được dùng để tính giá/stock/ảnh
     let bestVariant = null
-    let bestScore = -1
-    for (const v of product.variants) {
-      if (!v.active) continue
-      const score = selectedEntries.filter(([, val]) =>
-        v.valueLabels?.includes(val)
-      ).length
-      if (score > bestScore) {
-        bestScore = score
-        bestVariant = v
-      }
+    if (selectedEntries.length > 0) {
+      const fullyMatched = product.variants.filter(v =>
+        v.active &&
+        selectedEntries.every(([, val]) => v.valueLabels?.includes(val))
+      )
+      // Ưu tiên variant còn hàng; nếu không có thì lấy cái đầu tiên (để hiển thị "hết hàng")
+      bestVariant = fullyMatched.find(v => v.stockQty > 0) ?? fullyMatched[0] ?? null
     }
 
-    // Nếu không chọn gì → không highlight biến thể nào
-    if (selectedEntries.length === 0) bestVariant = null
-
-    // ── Build gallery ─────────────────────────────────────────────────────
-    // 1. Ảnh chính sản phẩm
+    // ── Build gallery ─────────────────────────────────────────────────────────
     const mainImages = product.images ?? []
-
-    // 2. Ảnh từ tất cả biến thể (gộp, loại trùng)
     const variantImages = (product.variants ?? [])
       .flatMap(v => v.images ?? [])
       .filter(Boolean)
 
-    // Gộp: mainImages trước, variant images sau (loại trùng URL)
     const seen = new Set()
     const allImages = []
     for (const url of [...mainImages, ...variantImages]) {
       if (!seen.has(url)) { seen.add(url); allImages.push(url) }
     }
 
-    // Index của ảnh đầu tiên thuộc bestVariant trong allImages
+    // ── Bug 3 fix: normalize URL trước khi indexOf để tránh mismatch ──────────
+    // Loại bỏ trailing slash và query string khi so sánh, giữ URL gốc trong allImages
+    const normalizeUrl = (url) => {
+      try {
+        const u = new URL(url)
+        // Giữ origin + pathname, bỏ search/hash
+        return (u.origin + u.pathname).replace(/\/$/, '')
+      } catch {
+        return url.split('?')[0].replace(/\/$/, '')
+      }
+    }
+
+    const normalizedAllImages = allImages.map(normalizeUrl)
+
     let variantImgIndex = -1
     if (bestVariant?.images?.length) {
       const firstVariantImg = bestVariant.images[0]
-      variantImgIndex = allImages.indexOf(firstVariantImg)
+      const normalizedTarget = normalizeUrl(firstVariantImg)
+
+      // Tìm theo normalized URL trước, fallback về indexOf gốc
+      variantImgIndex = normalizedAllImages.indexOf(normalizedTarget)
+      if (variantImgIndex === -1) {
+        variantImgIndex = allImages.indexOf(firstVariantImg)
+      }
+
+      // Nếu ảnh variant hoàn toàn không nằm trong allImages (URL khác hoàn toàn)
+      // thêm nó vào đầu allImages để người dùng vẫn thấy đúng ảnh
+      if (variantImgIndex === -1 && firstVariantImg) {
+        allImages.unshift(firstVariantImg)
+        variantImgIndex = 0
+      }
     }
 
-    // ── Giá / stock ───────────────────────────────────────────────────────
+    // ── Giá / stock ───────────────────────────────────────────────────────────
     const src = bestVariant ?? product
     const price = src.price ?? 0
     const sale = src.salePrice ?? null
-    const effective = sale ?? price
+    const effective = (sale && sale < price) ? sale : price
     const isOnSale = !!sale && sale < price
     const discountPct = isOnSale ? Math.round((1 - sale / price) * 100) : 0
 

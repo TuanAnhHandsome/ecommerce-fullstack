@@ -67,7 +67,7 @@ export default function ProductDetailPage() {
   const [buyNowLoading, setBuyNowLoading] = useState(false)
   const [activeTab, setActiveTab] = useState('spec')
 
-  const { addItem, fetchCart, items: cartItems } = useCartStore()
+  const { addItem } = useCartStore()
   const isAuthenticated = useAuthStore(s => s.isAuthenticated)
   const isNumeric = /^\d+$/.test(slug)
 
@@ -78,11 +78,10 @@ export default function ProductDetailPage() {
       : productAPI.getBySlug(slug).then(r => r.data),
   })
 
+  // Bug 1 fix: bỏ optional chaining thừa — productAPI.getReviews luôn tồn tại
   const { data: reviewData } = useQuery({
     queryKey: ['reviews', product?.id, reviewPage],
-    queryFn: () => productAPI.getReviews
-      ? productAPI.getReviews(product.id, { page: reviewPage, size: 5 }).then(r => r.data)
-      : null,
+    queryFn: () => productAPI.getReviews(product.id, { page: reviewPage, size: 5 }).then(r => r.data),
     enabled: !!product?.id,
   })
 
@@ -117,7 +116,7 @@ export default function ProductDetailPage() {
 
   // Validate variant selection nếu product có variants
   const validateVariantSelection = () => {
-    if (!product?.variantOptions?.length) return true // không có variant → OK
+    if (!product?.variantOptions?.length) return true
 
     const unselected = product.variantOptions.filter(
       opt => !selectedValues[opt.name]
@@ -132,19 +131,18 @@ export default function ProductDetailPage() {
   const handleAddToCart = () => {
     if (!isAuthenticated) { navigate('/login'); return }
     if (!validateVariantSelection()) return
-    // addItem(productId, quantity, variantId)
     addItem(product.id, qty, bestVariant?.id ?? null)
   }
 
   /**
    * Buy Now flow:
-   * 1. Thêm sản phẩm vào cart (addItem gọi API → fetchCart cập nhật store)
-   * 2. Lấy cartItemId vừa được tạo từ store
-   * 3. Navigate sang /checkout với cartItemIds
    *
-   * Lý do không navigate với items trực tiếp:
-   * - Backend cần cartItemId để verify ownership và lấy đúng giá/stock
-   * - Tránh client tự ý truyền giá lên
+   * Vấn đề trước: dùng cartItem.id từ response của addItem, nhưng backend trả về
+   * CartResponse (toàn bộ giỏ) chứ không phải CartItem đơn lẻ → id undefined → bị stuck.
+   *
+   * Fix: addItem (silent=true) → fetchCart đã chạy bên trong addItem →
+   * store đã có data mới → tìm item theo productId + variantId từ store.
+   * Đây là cách đáng tin vì store lúc này đã sync với server.
    */
   const handleBuyNow = async () => {
     if (!isAuthenticated) { navigate('/login'); return }
@@ -152,32 +150,34 @@ export default function ProductDetailPage() {
 
     setBuyNowLoading(true)
     try {
-      // 1. Thêm vào cart (API call)
-      await addItem(product.id, qty, bestVariant?.id ?? null)
+      // silent=true → không toast "Đã thêm vào giỏ" trong flow Buy Now
+      const success = await addItem(product.id, qty, bestVariant?.id ?? null, true)
 
-      // 2. Fetch cart mới nhất để có cartItemId
-      await fetchCart()
+      // addItem trả về null khi có lỗi (đã toast error bên trong)
+      if (success === null) return
 
-      // 3. Tìm cartItemId vừa thêm trong store
-      //    Match theo productId + variantId
-      const cartState = useCartStore.getState()
-      const newItem = cartState.items.find(item =>
+      // Sau addItem, fetchCart đã chạy → store đã sync → tìm item
+      const items = useCartStore.getState().items
+      const variantId = bestVariant?.id ?? null
+
+      const matched = items.find(item =>
         item.productId === product.id &&
-        (bestVariant ? item.variantId === bestVariant.id : item.variantId == null)
+        (variantId !== null
+          ? item.variantId === variantId
+          : item.variantId == null)
       )
 
-      if (!newItem) {
-        toast.error('Không thể xác định sản phẩm trong giỏ hàng')
+      if (!matched) {
+        toast.error('Không thể xác định sản phẩm trong giỏ hàng, vui lòng thử lại')
         return
       }
 
-      // 4. Navigate với cartItemIds
       navigate('/checkout', {
-        state: { cartItemIds: [newItem.id] }
+        state: { cartItemIds: [matched.id] },
       })
     } catch (err) {
-      // addItem đã toast error rồi nên không cần toast thêm
       console.error('Buy now error:', err)
+      toast.error('Có lỗi xảy ra, vui lòng thử lại')
     } finally {
       setBuyNowLoading(false)
     }

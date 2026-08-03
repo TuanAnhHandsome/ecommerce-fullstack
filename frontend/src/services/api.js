@@ -1,4 +1,9 @@
 import axios from 'axios'
+// NOTE: import này tạo một dependency cycle với authStore.js (authStore.js import
+// `authAPI` từ file này). Đây là cycle AN TOÀN vì cả 2 phía chỉ dùng biến import
+// bên trong function body (chạy sau khi mọi module đã load xong), không dùng ở
+// top-level của module — nên không gặp lỗi "Cannot access before initialization".
+import { useAuthStore } from '../store/authStore'
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080/api'
 
@@ -6,13 +11,15 @@ const api = axios.create({
   baseURL: API_BASE_URL,
   timeout: 10000,
   headers: { 'Content-Type': 'application/json' },
+  // BẮT BUỘC để trình duyệt gửi/nhận cookie `refreshToken` (httpOnly) — nếu thiếu
+  // dòng này, cookie Set-Cookie từ backend sẽ bị trình duyệt âm thầm bỏ qua.
+  withCredentials: true,
 })
 
 // ── Request interceptor: đính token ──────────────────────────────
 api.interceptors.request.use(
   (config) => {
-    const authStorage = JSON.parse(localStorage.getItem('auth-storage') || '{}')
-    const token = authStorage?.state?.accessToken
+    const token = useAuthStore.getState().accessToken
     if (token) config.headers.Authorization = `Bearer ${token}`
     return config
   },
@@ -20,30 +27,24 @@ api.interceptors.request.use(
 )
 
 // ── Response interceptor: auto refresh token ─────────────────────
+// Không còn tự tay đọc/gửi refreshToken nữa — nó nằm trong cookie httpOnly,
+// trình duyệt tự đính kèm khi gọi /auth/refresh (nhờ withCredentials: true ở trên).
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    if (error.response?.status === 401 && !originalRequest._retry
+        && !originalRequest.url?.includes('/auth/refresh')) {
       originalRequest._retry = true
       try {
-        const authStorage = JSON.parse(localStorage.getItem('auth-storage') || '{}')
-        const refreshToken = authStorage?.state?.refreshToken
+        const { data } = await axios.post(`${API_BASE_URL}/auth/refresh`, null, { withCredentials: true })
 
-        if (!refreshToken) throw new Error('No refresh token')
-
-        const { data } = await axios.post(`${API_BASE_URL}/auth/refresh`, { refreshToken })
-
-        const stored = JSON.parse(localStorage.getItem('auth-storage') || '{}')
-        if (stored.state) {
-          stored.state.accessToken = data.accessToken
-          localStorage.setItem('auth-storage', JSON.stringify(stored))
-        }
+        useAuthStore.setState({ accessToken: data.accessToken, user: data.user, isAuthenticated: true })
 
         originalRequest.headers.Authorization = `Bearer ${data.accessToken}`
         return api(originalRequest)
       } catch {
-        localStorage.removeItem('auth-storage')
+        useAuthStore.setState({ user: null, accessToken: null, isAuthenticated: false })
         window.location.href = '/login'
       }
     }
@@ -59,7 +60,9 @@ export const authAPI = {
   register: (data) => api.post('/auth/register', data),
   sendOtp: (email) => api.post('/auth/send-otp', { email }),
   verifyOtp: (email, otp) => api.post('/auth/verify-otp', { email, otp }),
-  refresh: (refreshToken) => api.post('/auth/refresh', { refreshToken }),
+  // Không còn nhận param refreshToken — cookie httpOnly được browser tự gửi kèm.
+  refresh: () => api.post('/auth/refresh'),
+  logout: () => api.post('/auth/logout'),
 }
 
 // ── Products ──────────────────────────────────────────────────────

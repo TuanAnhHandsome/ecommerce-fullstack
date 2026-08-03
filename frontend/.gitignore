@@ -2,27 +2,9 @@ node_modules/
 dist/
 dist-ssr/
 build/
-*.localgit status
-# Spring Boot / Java
-**/target/
-**/*.class
-**/application.yml
-# Giữ lại file example để team biết cần config gì
-!**/application.yml.example
 
-# IDE
-.idea/
-*.iml
-.vscode/
+.env*
+!.env.example
 
-# Node / Frontend
-**/node_modules/
-**/dist/
-# Chặn tất cả các file .env trong thư mục frontend
-frontend/.env*
-# Ngoại trừ file example (nếu có)
-!frontend/.env.example
-
-# Khác
 .DS_Store
 Thumbs.db

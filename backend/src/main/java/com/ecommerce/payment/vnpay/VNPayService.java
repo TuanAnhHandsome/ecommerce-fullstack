@@ -35,8 +35,12 @@ public class VNPayService {
     private final EmailService emailService;
 
     /**
-     * Tạo URL thanh toán VNPay
-     * Theo đúng demo chính thức VNPay Java
+     * Tạo URL thanh toán VNPay.
+     * Theo đúng demo chính thức VNPay Java.
+     *
+     * Bug A fix: thay vì luôn INSERT một Payment mới (gây UniqueConstraint violation
+     * khi user retry), giờ dùng upsert — nếu đã có Payment PENDING cho order này thì
+     * reset và reuse nó, tránh duplicate key trên order_id.
      */
     public String createPaymentUrl(Order order, HttpServletRequest request) {
         long amount = order.getFinalAmount()
@@ -84,13 +88,18 @@ public class VNPayService {
 
         log.info("VNPay URL created for order: {}", txnRef);
 
-        savePaymentRecord(order, txnRef, secureHash);
+        // Bug A fix: upsert thay vì luôn INSERT mới
+        upsertPaymentRecord(order, txnRef, secureHash);
 
         return vnPayConfig.getPayUrl() + "?" + query;
     }
 
     /**
-     * Xử lý IPN Webhook từ VNPay — server-to-server
+     * Xử lý IPN Webhook từ VNPay — server-to-server.
+     *
+     * Bug B fix: khi thanh toán thất bại (responseCode != "00"), KHÔNG set order về
+     * CANCELLED mà set về AWAITING_PAYMENT để user có thể retry. Chỉ CANCELLED khi
+     * user chủ động hủy đơn từ giao diện (OrderService.cancel).
      */
     @Transactional
     public Map<String, String> processIPN(Map<String, String> vnpParams) {
@@ -119,7 +128,7 @@ public class VNPayService {
             String payDate       = vnpParams.get("vnp_PayDate");
             long   vnpAmount     = Long.parseLong(vnpParams.get("vnp_Amount"));
 
-            // ✅ FIX: dùng JOIN FETCH để load sẵn user + orderItems trong cùng transaction
+            // Dùng JOIN FETCH để load sẵn user + orderItems trong cùng transaction
             // tránh LazyInitializationException khi @Async email thread chạy sau khi Session đóng
             Order order = orderRepository.findByOrderCodeWithDetails(txnRef).orElse(null);
             if (order == null) {
@@ -143,6 +152,7 @@ public class VNPayService {
             }
 
             if ("00".equals(responseCode)) {
+                // ── Thanh toán thành công ────────────────────────────────────
                 order.setStatus(OrderStatus.PAID);
                 orderRepository.save(order);
 
@@ -160,18 +170,23 @@ public class VNPayService {
 
                 emailService.sendOrderConfirmation(order);
                 log.info("✅ IPN: Thanh toán THÀNH CÔNG cho order {}", txnRef);
+
             } else {
-                order.setStatus(OrderStatus.CANCELLED);
+                // ── Bug B fix: thanh toán thất bại / user hủy ở VNPay ────────
+                // KHÔNG set CANCELLED — order vẫn còn hiệu lực, user có thể retry.
+                // Chỉ reset về AWAITING_PAYMENT để OrderRetryPayment banner hiện lại.
+                order.setStatus(OrderStatus.AWAITING_PAYMENT);
                 orderRepository.save(order);
 
                 paymentRepository.findByOrder(order).ifPresent(payment -> {
+                    // Reset Payment về FAILED để createPaymentUrl() có thể upsert lại
                     payment.setStatus(PaymentStatus.FAILED);
                     payment.setVnpResponseCode(responseCode);
                     payment.setRawCallback(toJson(vnpParams));
                     paymentRepository.save(payment);
                 });
 
-                log.warn("IPN: Thanh toán THẤT BẠI, order={}, code={}", txnRef, responseCode);
+                log.warn("IPN: Thanh toán THẤT BẠI / hủy, order={}, code={}", txnRef, responseCode);
             }
 
             result.put("RspCode", "00");
@@ -186,7 +201,7 @@ public class VNPayService {
     }
 
     /**
-     * Verify Return URL — chỉ để hiển thị kết quả cho user
+     * Verify Return URL — chỉ để hiển thị kết quả cho user.
      */
     public boolean verifyReturnUrl(Map<String, String> vnpParams) {
         String vnpSecureHash = vnpParams.remove("vnp_SecureHash");
@@ -196,19 +211,60 @@ public class VNPayService {
         return checkHash.equalsIgnoreCase(vnpSecureHash);
     }
 
-    // ── Private helpers ──────────────────────────────────────────
+    // ── Private helpers ───────────────────────────────────────────────────────
 
-    private void savePaymentRecord(Order order, String txnRef, String secureHash) {
-        Payment payment = Payment.builder()
-            .order(order)
-            .gateway(PaymentGateway.VNPAY)
-            .amount(order.getFinalAmount())
-            .currency("VND")
-            .status(PaymentStatus.PENDING)
-            .vnpTxnRef(txnRef)
-            .vnpSecureHash(secureHash)
-            .build();
-        paymentRepository.save(payment);
+    /**
+     * Bug A fix: upsert Payment thay vì luôn INSERT mới.
+     *
+     * Logic:
+     * - Nếu chưa có Payment cho order → tạo mới (lần đầu thanh toán).
+     * - Nếu đã có Payment PENDING hoặc FAILED (user đã thử trước đó) →
+     *   reset về PENDING + cập nhật secureHash mới, không tạo thêm record.
+     * - Nếu đã SUCCESS → không làm gì (không thể thanh toán lại đơn đã xong).
+     *
+     * Điều này tránh UniqueConstraintViolation do @OneToOne unique=true trên order_id.
+     */
+    @Transactional
+    protected void upsertPaymentRecord(Order order, String txnRef, String secureHash) {
+        Optional<Payment> existing = paymentRepository.findByOrder(order);
+
+        if (existing.isPresent()) {
+            Payment payment = existing.get();
+
+            // Không cho phép tạo URL mới nếu đã thanh toán thành công
+            if (payment.getStatus() == PaymentStatus.SUCCESS) {
+                log.warn("Attempted to re-create payment URL for already-paid order: {}", txnRef);
+                return;
+            }
+
+            // Reset record cũ (PENDING hoặc FAILED) để dùng lại
+            payment.setStatus(PaymentStatus.PENDING);
+            payment.setVnpTxnRef(txnRef);
+            payment.setVnpSecureHash(secureHash);
+            payment.setVnpTransactionNo(null);
+            payment.setVnpBankCode(null);
+            payment.setVnpPayDate(null);
+            payment.setVnpResponseCode(null);
+            payment.setRawCallback(null);
+            payment.setPaidAt(null);
+            paymentRepository.save(payment);
+
+            log.info("Payment record reset for retry, order: {}", txnRef);
+        } else {
+            // Lần đầu tiên tạo payment cho order này
+            Payment payment = Payment.builder()
+                .order(order)
+                .gateway(PaymentGateway.VNPAY)
+                .amount(order.getFinalAmount())
+                .currency("VND")
+                .status(PaymentStatus.PENDING)
+                .vnpTxnRef(txnRef)
+                .vnpSecureHash(secureHash)
+                .build();
+            paymentRepository.save(payment);
+
+            log.info("New payment record created for order: {}", txnRef);
+        }
     }
 
     private String buildHashData(Map<String, String> params) {

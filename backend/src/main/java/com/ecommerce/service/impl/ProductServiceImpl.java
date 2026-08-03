@@ -11,6 +11,7 @@ import com.ecommerce.service.CloudinaryService;
 import com.ecommerce.service.ProductService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
@@ -52,8 +53,9 @@ public class ProductServiceImpl implements ProductService {
                 .and(ProductSpecification.minPrice(minPrice))
                 .and(ProductSpecification.maxPrice(maxPrice));
 
-        return PageResponse.of(
-                productRepository.findAll(spec, pageable).map(this::toResponse));
+        Page<Product> page = productRepository.findAll(spec, pageable);
+        ProductBatchData batch = loadBatchData(productIdsOf(page));
+        return PageResponse.of(page.map(p -> toResponse(p, batch)));
     }
 
     @Override
@@ -69,8 +71,13 @@ public class ProductServiceImpl implements ProductService {
                 .and(ProductSpecification.minPrice(minPrice))
                 .and(ProductSpecification.maxPrice(maxPrice));
 
-        return PageResponse.of(
-                productRepository.findAll(spec, pageable).map(this::toResponse));
+        Page<Product> page = productRepository.findAll(spec, pageable);
+        ProductBatchData batch = loadBatchData(productIdsOf(page));
+        return PageResponse.of(page.map(p -> toResponse(p, batch)));
+    }
+
+    private List<Long> productIdsOf(Page<Product> page) {
+        return page.getContent().stream().map(Product::getId).toList();
     }
 
     @Override
@@ -215,20 +222,84 @@ public class ProductServiceImpl implements ProductService {
 
     // ── toResponse ────────────────────────────────────────────────────────────
 
-    private ProductResponse toResponse(Product p) {
-        List<String> imageUrls = productImageRepository
-                .findByProductIdOrderBySortOrder(p.getId())
-                .stream().map(ProductImage::getUrl).toList();
+    /**
+     * Dữ liệu phụ trợ (ảnh, review, biến thể, spec) đã được load sẵn cho CẢ TRANG
+     * sản phẩm bằng vài query IN-clause, thay vì gọi lại DB cho từng sản phẩm.
+     *
+     * ⚠️ TRƯỚC ĐÂY: mỗi lần toResponse(Product) chạy sẽ tự bắn ra 7 query riêng
+     * (ảnh, avgRating, reviewCount, variantOptions, variants+values, variants+images, specs).
+     * Với 1 trang 12 sản phẩm, tổng cộng phát sinh tới ~85 query chỉ để render
+     * MỘT trang danh sách (GET /products) — đây là N+1 nghiêm trọng nhất trong dự án.
+     * Giờ chỉ còn 6 query CỐ ĐỊNH cho toàn trang, bất kể trang có bao nhiêu sản phẩm.
+     */
+    private record ProductBatchData(
+            Map<Long, List<String>> imagesByProduct,
+            Map<Long, Double> avgRatingByProduct,
+            Map<Long, Integer> reviewCountByProduct,
+            Map<Long, List<VariantOption>> optionsByProduct,
+            Map<Long, List<ProductVariant>> variantsWithValuesByProduct,
+            Map<Long, List<String>> variantImagesByVariantId,
+            Map<Long, List<ProductSpec>> specsByProduct
+    ) {}
+
+    private ProductBatchData loadBatchData(List<Long> productIds) {
+        if (productIds.isEmpty()) {
+            return new ProductBatchData(Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of());
+        }
+
+        Map<Long, List<String>> imagesByProduct = productImageRepository
+                .findByProductIdInOrderBySortOrder(productIds).stream()
+                .collect(Collectors.groupingBy(
+                        img -> img.getProduct().getId(),
+                        LinkedHashMap::new,
+                        Collectors.mapping(ProductImage::getUrl, Collectors.toList())));
+
+        Map<Long, Double> avgRatingByProduct = new HashMap<>();
+        Map<Long, Integer> reviewCountByProduct = new HashMap<>();
+        for (Object[] row : reviewRepository.aggregateByProductIds(productIds)) {
+            Long productId = (Long) row[0];
+            avgRatingByProduct.put(productId, (Double) row[1]);
+            reviewCountByProduct.put(productId, ((Number) row[2]).intValue());
+        }
+
+        Map<Long, List<VariantOption>> optionsByProduct = variantOptionRepository
+                .findByProductIdInOrderBySortOrder(productIds).stream()
+                .collect(Collectors.groupingBy(
+                        opt -> opt.getProduct().getId(), LinkedHashMap::new, Collectors.toList()));
+
+        Map<Long, List<ProductVariant>> variantsWithValuesByProduct = variantRepository
+                .findByProductIdInWithValues(productIds).stream()
+                .collect(Collectors.groupingBy(
+                        v -> v.getProduct().getId(), LinkedHashMap::new, Collectors.toList()));
+
+        Map<Long, List<String>> variantImagesByVariantId = variantRepository
+                .findByProductIdInWithImages(productIds).stream()
+                .collect(Collectors.toMap(
+                        ProductVariant::getId,
+                        v -> v.getImages().stream().map(VariantImage::getUrl).toList()));
+
+        Map<Long, List<ProductSpec>> specsByProduct = productSpecRepository
+                .findByProductIdInOrdered(productIds).stream()
+                .collect(Collectors.groupingBy(
+                        s -> s.getProduct().getId(), LinkedHashMap::new, Collectors.toList()));
+
+        return new ProductBatchData(imagesByProduct, avgRatingByProduct, reviewCountByProduct,
+                optionsByProduct, variantsWithValuesByProduct, variantImagesByVariantId, specsByProduct);
+    }
+
+    /** Dùng cho danh sách sản phẩm — không tự bắn query, chỉ đọc từ batch đã load sẵn. */
+    private ProductResponse toResponse(Product p, ProductBatchData batch) {
+        List<String> imageUrls = batch.imagesByProduct().getOrDefault(p.getId(), List.of());
         if (imageUrls.isEmpty() && p.getImageUrl() != null) {
             imageUrls = List.of(p.getImageUrl());
         }
 
-        Double avg = reviewRepository.avgRatingByProduct(p.getId());
-        Integer reviewCount = reviewRepository.countByProduct(p.getId());
+        Double avg = batch.avgRatingByProduct().get(p.getId());
+        Integer reviewCount = batch.reviewCountByProduct().getOrDefault(p.getId(), 0);
 
-        List<ProductResponse.VariantOptionResponse> variantOptions = variantOptionRepository
-                .findByProductIdOrderBySortOrder(p.getId())
-                .stream().map(opt -> ProductResponse.VariantOptionResponse.builder()
+        List<ProductResponse.VariantOptionResponse> variantOptions = batch.optionsByProduct()
+                .getOrDefault(p.getId(), List.of()).stream()
+                .map(opt -> ProductResponse.VariantOptionResponse.builder()
                         .id(opt.getId())
                         .name(opt.getName())
                         .sortOrder(opt.getSortOrder())
@@ -239,11 +310,8 @@ public class ProductServiceImpl implements ProductService {
                         .build())
                 .toList();
 
-        List<ProductVariant> variantsWithValues = variantRepository.findByProductIdWithValues(p.getId());
-        Map<Long, List<String>> imagesMap = variantRepository.findByProductIdWithImages(p.getId()).stream()
-                .collect(Collectors.toMap(
-                        ProductVariant::getId,
-                        v -> v.getImages().stream().map(VariantImage::getUrl).toList()));
+        List<ProductVariant> variantsWithValues = batch.variantsWithValuesByProduct()
+                .getOrDefault(p.getId(), List.of());
 
         List<ProductResponse.VariantSkuResponse> variants = variantsWithValues.stream()
                 .map(v -> ProductResponse.VariantSkuResponse.builder()
@@ -251,12 +319,12 @@ public class ProductServiceImpl implements ProductService {
                         .salePrice(v.getSalePrice()).effectivePrice(v.getEffectivePrice())
                         .stockQty(v.getStockQty()).active(v.getActive()).sortOrder(v.getSortOrder())
                         .valueLabels(v.getVariantValues().stream().map(VariantValue::getValue).toList())
-                        .images(imagesMap.getOrDefault(v.getId(), List.of()))
+                        .images(batch.variantImagesByVariantId().getOrDefault(v.getId(), List.of()))
                         .build())
                 .toList();
 
         Map<String, List<SpecItem>> specsMap = new LinkedHashMap<>();
-        productSpecRepository.findByProductIdOrdered(p.getId()).forEach(s -> {
+        batch.specsByProduct().getOrDefault(p.getId(), List.of()).forEach(s -> {
             specsMap.computeIfAbsent(s.getSpecGroup(), k -> new ArrayList<>())
                     .add(SpecItem.builder()
                             .key(s.getSpecKey())
@@ -282,12 +350,21 @@ public class ProductServiceImpl implements ProductService {
                 .active(p.getActive())
                 .createdAt(p.getCreatedAt())
                 .avgRating(avg != null ? Math.round(avg * 10.0) / 10.0 : null)
-                .reviewCount(reviewCount != null ? reviewCount : 0)
+                .reviewCount(reviewCount)
                 .soldCount(null)
                 .variantOptions(variantOptions)
                 .variants(variants)
                 .specs(specsMap)
                 .build();
+    }
+
+    /**
+     * Dùng cho 1 sản phẩm đơn lẻ (chi tiết sản phẩm, sau khi tạo/cập nhật) — vẫn
+     * chỉ chạy đúng 6 query cố định như trên (loadBatchData với 1 id), không phải
+     * là "quay lại N+1", vì chỉ có 1 sản phẩm nên N=1 theo đúng nghĩa.
+     */
+    private ProductResponse toResponse(Product p) {
+        return toResponse(p, loadBatchData(List.of(p.getId())));
     }
 
     // ── Utils ─────────────────────────────────────────────────────────────────

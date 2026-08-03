@@ -18,7 +18,7 @@ export default function HomePage() {
     queryFn: () => categoryAPI.getAll().then(r => r.data),
   })
 
-  // ── Scroll + drag + fade logic ──────────────────────────────────
+  // ── Scroll + drag + fade logic ──────────
   const trackRef = useRef(null)
   const [showFade, setShowFade] = useState(true)
   const isDragging = useRef(false)
@@ -52,7 +52,7 @@ export default function HomePage() {
 
   return (
     <div>
-      {/* ── Hero ──────────────────────────────────────────────────── */}
+      {/* ── Hero  */}
       <div className="relative bg-gray-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col lg:flex-row items-center min-h-[500px] lg:min-h-[600px] gap-12">
@@ -100,10 +100,10 @@ export default function HomePage() {
         </div>
       </div>
 
-      {/* ── Main content ───────────────────────────────────────────── */}
+      {/* ── Main content ─ */}
       <div className="max-w-7xl mx-auto px-4 py-12">
 
-        {/* ── Danh mục sản phẩm ────────────────────────────────────── */}
+        {/* ── Danh mục sản phẩm ── */}
         {categories?.length > 0 && (
           <section className="mb-12">
             <div className="flex items-center justify-between mb-4">
@@ -137,11 +137,11 @@ export default function HomePage() {
                     <div className="w-14 h-14 rounded-2xl mx-auto mb-3 overflow-hidden bg-red-50 flex items-center justify-center group-hover:bg-red-100 transition-colors">
                       {cat.imageUrl
                         ? <img
-                            src={cat.imageUrl}
-                            alt={cat.name}
-                            className="w-full h-full object-cover"
-                            draggable={false}
-                          />
+                          src={cat.imageUrl}
+                          alt={cat.name}
+                          className="w-full h-full object-cover"
+                          draggable={false}
+                        />
                         : <span className="text-2xl">{DEFAULT_EMOJI}</span>
                       }
                     </div>
@@ -164,7 +164,7 @@ export default function HomePage() {
           </section>
         )}
 
-        {/* ── Sản phẩm mới nhất ────────────────────────────────────── */}
+        {/* ── Sản phẩm mới nhất ── */}
         <section>
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-xl font-bold text-gray-800">

@@ -1,19 +1,25 @@
 package com.ecommerce.exception;
 
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.validation.FieldError;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
 
 @RestControllerAdvice
+@Slf4j
 public class GlobalExceptionHandler {
 
     @ExceptionHandler(ResourceNotFoundException.class)
@@ -52,10 +58,40 @@ public class GlobalExceptionHandler {
         return ResponseEntity.badRequest().body(response);
     }
 
+    /**
+     * Vi phạm ràng buộc DB (unique, foreign key, not-null...) — ví dụ đăng ký
+     * trùng email do race condition, xoá 1 category đang có sản phẩm tham chiếu.
+     * Trước đây rơi vào handleGeneral() và trả nguyên message của Postgres/Hibernate
+     * (lộ tên bảng, tên cột, cấu trúc DB) — giờ trả message chung, an toàn hơn.
+     */
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ErrorResponse> handleDataIntegrity(DataIntegrityViolationException ex) {
+        log.warn("Data integrity violation: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+            .body(new ErrorResponse(409, "Dữ liệu bị trùng hoặc đang được tham chiếu bởi dữ liệu khác"));
+    }
+
+    @ExceptionHandler({ MissingServletRequestParameterException.class,
+                        MethodArgumentTypeMismatchException.class,
+                        HttpRequestMethodNotSupportedException.class })
+    public ResponseEntity<ErrorResponse> handleBadRequest(Exception ex) {
+        log.warn("Bad request: {}", ex.getMessage());
+        return ResponseEntity.badRequest()
+            .body(new ErrorResponse(400, "Yêu cầu không hợp lệ"));
+    }
+
+    /**
+     * ⚠️ FIX BẢO MẬT: trước đây trả `ex.getMessage()` trực tiếp cho MỌI lỗi
+     * chưa được bắt riêng — có thể lộ thông tin nội bộ (câu SQL lỗi, tên class,
+     * đường dẫn file, cấu trúc DB...) cho người dùng/kẻ tấn công.
+     * Giờ log đầy đủ stack trace ở server (để dev debug) nhưng chỉ trả về
+     * message chung chung cho client.
+     */
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleGeneral(Exception ex) {
+        log.error("Unhandled exception", ex);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-            .body(new ErrorResponse(500, "Lỗi hệ thống: " + ex.getMessage()));
+            .body(new ErrorResponse(500, "Đã có lỗi xảy ra phía máy chủ. Vui lòng thử lại sau."));
     }
 
     public static class ErrorResponse {

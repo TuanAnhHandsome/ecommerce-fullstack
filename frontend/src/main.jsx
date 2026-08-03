@@ -6,6 +6,7 @@ import { Toaster } from 'react-hot-toast'
 import '@fortawesome/fontawesome-free/css/all.min.css';
 import './index.css'
 import App from './App.jsx'
+import ErrorBoundary from './components/common/ErrorBoundary.jsx'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -15,11 +16,13 @@ const queryClient = new QueryClient({
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <App />
-        <Toaster position="top-right" toastOptions={{ duration: 3000 }} />
-      </BrowserRouter>
-    </QueryClientProvider>
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <BrowserRouter>
+          <App />
+          <Toaster position="top-right" toastOptions={{ duration: 3000 }} />
+        </BrowserRouter>
+      </QueryClientProvider>
+    </ErrorBoundary>
   </StrictMode>,
 )

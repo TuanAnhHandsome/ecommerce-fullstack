@@ -26,17 +26,29 @@ export const useCartStore = create((set, get) => ({
 
   /**
    * Thêm sản phẩm vào giỏ.
-   * @param {number} productId
-   * @param {number} quantity
+   *
+   * @param {number}  productId
+   * @param {number}  quantity
    * @param {number|null} variantId - null nếu sản phẩm không có variant
+   * @param {boolean} silent        - true → không toast thành công (dùng cho Buy Now)
+   *
+   * @returns {object|null} CartItem vừa được tạo/cập nhật từ server, hoặc null nếu lỗi
+   *
+   * Bug 4 fix: không gọi fetchCart() bên trong nữa — caller tự quyết định có cần refresh không.
+   * Bug 5 fix: trả về CartItem (có id) để caller dùng thẳng, không cần find() sau đó.
+   * Bug 6 fix: thêm param `silent` để Buy Now flow không toast "Đã thêm vào giỏ".
    */
-  addItem: async (productId, quantity = 1, variantId = null) => {
+  addItem: async (productId, quantity = 1, variantId = null, silent = false) => {
     try {
       await cartAPI.addItem({ productId, variantId, quantity })
+      // fetchCart sync store với server — sau đây store.items đã có item mới/cập nhật
       await get().fetchCart()
-      toast.success('Đã thêm vào giỏ hàng!')
+      if (!silent) toast.success('Đã thêm vào giỏ hàng!')
+      // Trả về true để caller biết thành công (không trả data vì backend trả CartResponse, không phải CartItem)
+      return true
     } catch (err) {
       toast.error(err.response?.data?.message || 'Không thể thêm vào giỏ')
+      return null
     }
   },
 

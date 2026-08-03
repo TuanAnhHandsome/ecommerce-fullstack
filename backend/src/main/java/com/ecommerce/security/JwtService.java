@@ -49,6 +49,11 @@ public class JwtService {
         return username.equals(userDetails.getUsername()) && !isTokenExpired(token);
     }
 
+    /** Thời hạn refresh token, tính bằng milliseconds (dùng để tính expiresAt lưu DB / maxAge cookie). */
+    public long getRefreshTokenExpirationMs() {
+        return refreshTokenExpiration;
+    }
+
     private String buildToken(Map<String, Object> extraClaims,
                               UserDetails userDetails,
                               long expiration) {

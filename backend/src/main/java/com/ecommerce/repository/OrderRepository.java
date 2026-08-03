@@ -26,6 +26,36 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
 
     Long countByStatus(OrderStatus status);
 
+    // ── Fix N+1 cho danh sách đơn hàng (getMyOrders / getAllOrders) ──────────
+    // Trước đây getMyOrders/getAllOrders dùng trực tiếp findByUser/findByStatus/findAll,
+    // rồi toResponse() truy cập order.getUser(), order.getOrderItems(), order.getPayment()
+    // — cả 3 đều KHÔNG được join fetch, nên với 1 trang 20 đơn sẽ phát sinh tới ~60
+    // query phụ (mỗi đơn: 1 query user + 1 query orderItems + 1 query payment).
+    //
+    // Cách fix: lấy trang ID trước (query nhẹ, giữ đúng phân trang/sắp xếp), sau đó
+    // JOIN FETCH toàn bộ chi tiết cho đúng các ID đó trong 1 query duy nhất.
+    // Không JOIN FETCH collection trực tiếp trong query có Pageable, vì Hibernate
+    // sẽ phải phân trang trong bộ nhớ (rất chậm, có thể sai) khi kết hợp
+    // firstResult/maxResults với fetch join 1-nhiều.
+
+    @Query("SELECT o.id FROM Order o WHERE o.user = :user ORDER BY o.createdAt DESC")
+    Page<Long> findIdsByUser(@Param("user") User user, Pageable pageable);
+
+    @Query("SELECT o.id FROM Order o WHERE o.status = :status ORDER BY o.createdAt DESC")
+    Page<Long> findIdsByStatus(@Param("status") OrderStatus status, Pageable pageable);
+
+    @Query("SELECT o.id FROM Order o ORDER BY o.createdAt DESC")
+    Page<Long> findAllIds(Pageable pageable);
+
+    @Query("""
+        SELECT DISTINCT o FROM Order o
+        JOIN FETCH o.user
+        LEFT JOIN FETCH o.orderItems
+        LEFT JOIN FETCH o.payment
+        WHERE o.id IN :ids
+    """)
+    List<Order> findByIdInWithDetails(@Param("ids") List<Long> ids);
+
     @Query("SELECT o FROM Order o LEFT JOIN FETCH o.user ORDER BY o.createdAt DESC")
     Page<Order> findAllWithUser(Pageable pageable);
 

@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { useAuthStore } from './store/authStore'
 
@@ -32,21 +33,34 @@ import SettingsAdminPage from './pages/admin/SettingsAdminPage'
 
 function PrivateRoute({ children }) {
   const isAuthenticated = useAuthStore(s => s.isAuthenticated)
+  const isBootstrapping = useAuthStore(s => s.isBootstrapping)
   const location = useLocation()
+  // Đợi bootstrapSession() thử refresh token xong trước khi quyết định redirect,
+  // tránh trường hợp người dùng còn phiên hợp lệ nhưng bị văng về /login vì
+  // accessToken (giờ chỉ nằm trong RAM) chưa kịp khôi phục sau khi reload trang.
+  if (isBootstrapping) return null
   if (!isAuthenticated) return <Navigate to="/login" state={{ from: location }} replace />
   return children
 }
 
 function AdminRoute({ children }) {
   const isAuthenticated = useAuthStore(s => s.isAuthenticated)
+  const isBootstrapping = useAuthStore(s => s.isBootstrapping)
   const role = useAuthStore(s => s.user?.role)
   const location = useLocation()
+  if (isBootstrapping) return null
   if (!isAuthenticated) return <Navigate to="/login" state={{ from: location }} replace />
   if (role !== 'ADMIN') return <Navigate to="/" replace />
   return children
 }
 
 export default function App() {
+  const bootstrapSession = useAuthStore(s => s.bootstrapSession)
+
+  useEffect(() => {
+    bootstrapSession()
+  }, [bootstrapSession])
+
   return (
     <Routes>
       <Route element={<MainLayout />}>

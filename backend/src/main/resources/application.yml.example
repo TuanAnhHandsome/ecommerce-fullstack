@@ -46,6 +46,12 @@ jwt:
   access-token-expiration: 
   refresh-token-expiration: 
 
+# Cookie chứa refresh token (httpOnly) — xem AuthController.java
+app:
+  cookie:
+    secure: false     # BẮT BUỘC đổi thành true khi deploy production (HTTPS)
+    same-site: Lax     # Đổi thành "None" (kèm secure: true) nếu FE/BE ở domain khác nhau và KHÔNG qua proxy chung origin
+
 file:
   upload-dir: ./uploads/products
   base-url: http://localhost:8080/api/files

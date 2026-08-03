@@ -13,5 +13,10 @@ public interface VariantOptionRepository extends JpaRepository<VariantOption, Lo
     @Query("SELECT o FROM VariantOption o WHERE o.product.id = :productId ORDER BY o.sortOrder")
     List<VariantOption> findByProductIdOrderBySortOrder(@Param("productId") Long productId);
 
+    // ── Batch load cho danh sách sản phẩm (fix N+1) ──
+    @org.springframework.data.jpa.repository.EntityGraph(attributePaths = {"values"})
+    @Query("SELECT o FROM VariantOption o WHERE o.product.id IN :productIds ORDER BY o.product.id, o.sortOrder")
+    List<VariantOption> findByProductIdInOrderBySortOrder(@Param("productIds") List<Long> productIds);
+
     void deleteByProductId(Long productId);
 }

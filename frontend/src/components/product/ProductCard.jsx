@@ -25,7 +25,7 @@ export default function ProductCard({ product }) {
             src={product.imageUrl}
             alt={product.name}
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-            onError={e => { e.target.style.display='none'; e.target.nextSibling.style.display='flex' }}
+            onError={e => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex' }}
           />
         ) : null}
         {/* Fallback khi không có ảnh */}
