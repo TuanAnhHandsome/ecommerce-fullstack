@@ -9,8 +9,15 @@ import java.util.Optional;
 
 public interface CategoryRepository extends JpaRepository<Category, Long> {
     Optional<Category> findBySlug(String slug);
+
     List<Category> findByActiveTrueOrderByNameAsc();
+
     boolean existsBySlug(String slug);
+
+    boolean existsByNameIgnoreCase(String name);
+
+    Optional<Category> findByNameIgnoreCase(String name);
+
     @Query("SELECT c.name FROM Category c ORDER BY c.name ASC")
     List<String> findAllCategoryNames();
 }

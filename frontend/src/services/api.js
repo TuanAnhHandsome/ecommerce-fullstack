@@ -34,7 +34,7 @@ api.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config
     if (error.response?.status === 401 && !originalRequest._retry
-        && !originalRequest.url?.includes('/auth/refresh')) {
+      && !originalRequest.url?.includes('/auth/refresh')) {
       originalRequest._retry = true
       try {
         const { data } = await axios.post(`${API_BASE_URL}/auth/refresh`, null, { withCredentials: true })
@@ -82,6 +82,32 @@ export const productAPI = {
     params: { active },
   }),
 }
+
+// ── Thêm vào services/api.js ─────────────────────────────────────
+// (đặt cạnh productAPI, dùng chung file api.js hiện có)
+
+export const productImportAPI = {
+  // Trả về blob để browser tải file .xlsx
+  downloadTemplate: () => api.get('/products/import/template', { responseType: 'blob' }),
+
+  // file: File object từ <input type="file">
+  preview: (file) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    return api.post('/products/import/preview', fd, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
+
+  commit: (file) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    return api.post('/products/import', fd, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
+}
+
 
 // ── Categories ────────────────────────────────────────────────────
 export const categoryAPI = {

@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { productAPI, categoryAPI } from '../../services/api'
 import toast from 'react-hot-toast'
 import ProductFormModal from '../../components/admin/product/ProductFormModal'
+import ProductImportModal from '../../components/admin/product/ProductImportModal'
 
 const formatPrice = (p) => p ? new Intl.NumberFormat('vi-VN').format(p) + 'đ' : '—'
 
@@ -16,6 +17,7 @@ export default function ProductsAdminPage() {
   const [page, setPage] = useState(0)
   const [keyword, setKeyword] = useState('')
   const [showForm, setShowForm] = useState(false)
+  const [showImport, setShowImport] = useState(false)
   const [editing, setEditing] = useState(null)
   const [activeTab, setActiveTab] = useState('basic')
   const [loading, setLoading] = useState(false)
@@ -135,9 +137,14 @@ export default function ProductsAdminPage() {
           </h1>
           <p className="text-sm text-gray-400 mt-0.5">{data?.totalElements || 0} sản phẩm</p>
         </div>
-        <button onClick={openCreate} className="btn-primary flex items-center gap-2">
-          <i className="fa-solid fa-plus"></i>Thêm sản phẩm
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={() => setShowImport(true)} className="btn-secondary flex items-center gap-2">
+            <i className="fa-solid fa-file-excel"></i>Import hàng loạt
+          </button>
+          <button onClick={openCreate} className="btn-primary flex items-center gap-2">
+            <i className="fa-solid fa-plus"></i>Thêm sản phẩm
+          </button>
+        </div>
       </div>
 
       {/* Search */}
@@ -255,6 +262,8 @@ export default function ProductsAdminPage() {
       </div>
 
       {/* Modal */}
+      {showImport && <ProductImportModal onClose={() => setShowImport(false)} />}
+
       {showForm && (
         <ProductFormModal
           editing={editing}

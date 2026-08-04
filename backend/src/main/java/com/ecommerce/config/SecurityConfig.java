@@ -25,61 +25,81 @@ import java.util.List;
 @RequiredArgsConstructor
 public class SecurityConfig {
 
-    private final JwtAuthenticationFilter jwtAuthFilter;
-    private final AuthenticationProvider authenticationProvider;
+        private final JwtAuthenticationFilter jwtAuthFilter;
+        private final AuthenticationProvider authenticationProvider;
 
-    private static final String[] PUBLIC_ENDPOINTS = {
-            "/auth/**",
-            "/products/**",
-            "/categories/**",
-            "/search/**",
-            "/files/**",
-            "/payment/vnpay-return",
-            "/payment/vnpay-ipn",
-            // Tra cứu bảo hành công khai — không cần đăng nhập
-            "/warranty/lookup/**",
-    };
+        private static final String[] PUBLIC_ENDPOINTS = {
+                        "/auth/**",
+                        "/search/**",
+                        "/files/**",
+                        "/payment/vnpay-return",
+                        "/payment/vnpay-ipn",
+                        "/warranty/lookup/**"
+        };
 
-    @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
-        http
-                .csrf(AbstractHttpConfigurer::disable)
-                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
-                .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .authorizeHttpRequests(auth -> auth
-                        // Admin endpoints
-                        .requestMatchers("/admin/**").hasRole("ADMIN")
-                        .requestMatchers("/warranty/admin/**").hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.POST, "/categories/**").hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.PUT, "/categories/**").hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.DELETE, "/categories/**").hasRole("ADMIN")
-                        // Public
-                        .requestMatchers(PUBLIC_ENDPOINTS).permitAll()
-                        // Mọi request khác cần đăng nhập
-                        .anyRequest().authenticated())
-                .authenticationProvider(authenticationProvider)
-                .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
+        @Bean
+        public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+                http
+                                .csrf(AbstractHttpConfigurer::disable)
+                                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+                                .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                                .authorizeHttpRequests(auth -> auth
+                                                // Preflight CORS
+                                                .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 
-        return http.build();
-    }
+                                                // ADMIN Endpoints - Cần khớp cả /api/...
+                                                .requestMatchers("/api/admin/**", "/admin/**").hasRole("ADMIN")
+                                                .requestMatchers("/api/warranty/admin/**", "/warranty/admin/**")
+                                                .hasRole("ADMIN")
+                                                .requestMatchers("/api/returns/admin/**", "/returns/admin/**")
+                                                .hasRole("ADMIN")
+                                                .requestMatchers("/api/products/import/**", "/products/import/**")
+                                                .hasRole("ADMIN")
 
-    @Bean
-    public CorsConfigurationSource corsConfigurationSource() {
-        CorsConfiguration config = new CorsConfiguration();
+                                                // Categories
+                                                .requestMatchers(HttpMethod.POST, "/api/categories/**",
+                                                                "/categories/**")
+                                                .hasRole("ADMIN")
+                                                .requestMatchers(HttpMethod.PUT, "/api/categories/**", "/categories/**")
+                                                .hasRole("ADMIN")
+                                                .requestMatchers(HttpMethod.DELETE, "/api/categories/**",
+                                                                "/categories/**")
+                                                .hasRole("ADMIN")
 
-        // THÊM DOMAIN VERCEL VÀO ĐÂY:
-        config.setAllowedOrigins(List.of(
-                "http://localhost:3000",
-                "http://localhost:5173",
-                "https://ecommerce-fullstack-ashy.vercel.app"));
+                                                // Public GET
+                                                .requestMatchers(HttpMethod.GET, "/api/categories/**", "/categories/**")
+                                                .permitAll()
+                                                .requestMatchers(HttpMethod.GET, "/api/products/**", "/products/**")
+                                                .permitAll()
 
-        config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
-        config.setAllowedHeaders(List.of("*"));
-        config.setAllowCredentials(true);
-        config.setMaxAge(3600L);
+                                                // Public endpoints khác
+                                                .requestMatchers("/api/auth/**", "/auth/**", "/api/files/**",
+                                                                "/files/**")
+                                                .permitAll()
 
-        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        source.registerCorsConfiguration("/**", config);
-        return source;
-    }
+                                                .anyRequest().authenticated())
+                                .authenticationProvider(authenticationProvider)
+                                .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
+
+                return http.build();
+        }
+
+        @Bean
+        public CorsConfigurationSource corsConfigurationSource() {
+                CorsConfiguration config = new CorsConfiguration();
+
+                config.setAllowedOrigins(List.of(
+                                "http://localhost:3000",
+                                "http://localhost:5173",
+                                "https://ecommerce-fullstack-ashy.vercel.app"));
+
+                config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
+                config.setAllowedHeaders(List.of("*"));
+                config.setAllowCredentials(true);
+                config.setMaxAge(3600L);
+
+                UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+                source.registerCorsConfiguration("/**", config);
+                return source;
+        }
 }
