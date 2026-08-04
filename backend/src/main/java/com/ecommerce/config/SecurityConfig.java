@@ -28,54 +28,50 @@ public class SecurityConfig {
         private final JwtAuthenticationFilter jwtAuthFilter;
         private final AuthenticationProvider authenticationProvider;
 
-        private static final String[] PUBLIC_ENDPOINTS = {
-                        "/auth/**",
-                        "/search/**",
-                        "/files/**",
-                        "/payment/vnpay-return",
-                        "/payment/vnpay-ipn",
-                        "/warranty/lookup/**"
-        };
-
         @Bean
         public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
                 http
                                 .csrf(AbstractHttpConfigurer::disable)
+                                // Kích hoạt CORS
                                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                                 .authorizeHttpRequests(auth -> auth
-                                                // Preflight CORS
+                                                // 1. Cho phép tất cả Preflight OPTIONS request
                                                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 
-                                                // ADMIN Endpoints - Cần khớp cả /api/...
-                                                .requestMatchers("/api/admin/**", "/admin/**").hasRole("ADMIN")
-                                                .requestMatchers("/api/warranty/admin/**", "/warranty/admin/**")
-                                                .hasRole("ADMIN")
-                                                .requestMatchers("/api/returns/admin/**", "/returns/admin/**")
-                                                .hasRole("ADMIN")
-                                                .requestMatchers("/api/products/import/**", "/products/import/**")
-                                                .hasRole("ADMIN")
-
-                                                // Categories
-                                                .requestMatchers(HttpMethod.POST, "/api/categories/**",
-                                                                "/categories/**")
-                                                .hasRole("ADMIN")
-                                                .requestMatchers(HttpMethod.PUT, "/api/categories/**", "/categories/**")
-                                                .hasRole("ADMIN")
-                                                .requestMatchers(HttpMethod.DELETE, "/api/categories/**",
-                                                                "/categories/**")
-                                                .hasRole("ADMIN")
-
-                                                // Public GET
-                                                .requestMatchers(HttpMethod.GET, "/api/categories/**", "/categories/**")
+                                                // 2. Public GET
+                                                .requestMatchers(HttpMethod.GET, "/categories/**", "/api/categories/**")
                                                 .permitAll()
-                                                .requestMatchers(HttpMethod.GET, "/api/products/**", "/products/**")
+                                                .requestMatchers(HttpMethod.GET, "/products/**", "/api/products/**")
                                                 .permitAll()
 
-                                                // Public endpoints khác
-                                                .requestMatchers("/api/auth/**", "/auth/**", "/api/files/**",
-                                                                "/files/**")
+                                                // 3. Public Endpoints khác
+                                                .requestMatchers(
+                                                                "/auth/**", "/api/auth/**",
+                                                                "/search/**", "/api/search/**",
+                                                                "/files/**", "/api/files/**",
+                                                                "/payment/**", "/api/payment/**",
+                                                                "/warranty/lookup/**", "/api/warranty/lookup/**")
                                                 .permitAll()
+
+                                                // 4. Admin Endpoints
+                                                .requestMatchers("/admin/**", "/api/admin/**").hasRole("ADMIN")
+                                                .requestMatchers("/warranty/admin/**", "/api/warranty/admin/**")
+                                                .hasRole("ADMIN")
+                                                .requestMatchers("/returns/admin/**", "/api/returns/admin/**")
+                                                .hasRole("ADMIN")
+                                                .requestMatchers("/products/import/**", "/api/products/import/**")
+                                                .hasRole("ADMIN")
+
+                                                // 5. Admin Category Actions
+                                                .requestMatchers(HttpMethod.POST, "/categories/**",
+                                                                "/api/categories/**")
+                                                .hasRole("ADMIN")
+                                                .requestMatchers(HttpMethod.PUT, "/categories/**", "/api/categories/**")
+                                                .hasRole("ADMIN")
+                                                .requestMatchers(HttpMethod.DELETE, "/categories/**",
+                                                                "/api/categories/**")
+                                                .hasRole("ADMIN")
 
                                                 .anyRequest().authenticated())
                                 .authenticationProvider(authenticationProvider)
@@ -88,6 +84,7 @@ public class SecurityConfig {
         public CorsConfigurationSource corsConfigurationSource() {
                 CorsConfiguration config = new CorsConfiguration();
 
+                // Thêm domain Vercel + Localhost
                 config.setAllowedOrigins(List.of(
                                 "http://localhost:3000",
                                 "http://localhost:5173",
@@ -95,11 +92,14 @@ public class SecurityConfig {
 
                 config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
                 config.setAllowedHeaders(List.of("*"));
+                config.setExposedHeaders(List.of("Authorization", "Content-Type"));
                 config.setAllowCredentials(true);
                 config.setMaxAge(3600L);
 
                 UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+                // Đăng ký cho cả 2 kiểu pattern đường dẫn
                 source.registerCorsConfiguration("/**", config);
+                source.registerCorsConfiguration("/api/**", config);
                 return source;
         }
 }
